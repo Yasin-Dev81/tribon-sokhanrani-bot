@@ -119,3 +119,16 @@ class UserPractice:
         .filter(UserPracticeModel.teacher_id.is_(None))
 
         return query.all()
+
+    def read_with_practice_id(self, practice_id):
+        query = self.session.query(
+            UserPracticeModel.id,
+            UserModel.name
+        ).join(
+            PracticeModel, UserPracticeModel.practice_id == PracticeModel.id
+        ).join(
+            UserModel, UserPracticeModel.user_id == UserModel.id
+        ).filter(
+            UserPracticeModel.practice_id == practice_id
+        )
+        return query.all()

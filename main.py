@@ -1,6 +1,6 @@
 from pyrogram import Client, filters
 from pyrogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, ForceReply
-
+import asyncio
 
 import db.crud as db
 from config import ADMINS_LIST_ID, GROUP_CHAT_ID
@@ -109,8 +109,13 @@ async def admin_create_new_practice(client, message):
         "اگه فقط یک تاریخ وارد شود امروز بعنوان تاریخ شروع درنظر گرفته میشود!"
         "\n<b>فرمت تاریخ: روز/ماه/سال</b>\n\n"
         "مثال:"
-        "<i>\nexample-title\nexample-caption\n10/3/2024-15/3/2024</i>"
-        "\n\n<b>***Just send as a reply to this message***</b>",
+        "<i>\nexample-title\nexample-caption\n10/3/2024-15/3/2024</i>",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("exit!", callback_data=f"back_home")]
+        ])
+    )
+    await message.reply_text(
+        "<b>***Just send as a reply to this message***</b>",
         reply_markup=ForceReply(selective=True)
     )
 
@@ -143,6 +148,62 @@ async def admin_create_new_practice(client, message):
 
     # Add the handler
     app.add_handler(get_new_practice)
+
+
+@app.on_callback_query(filters.regex(r"admin_update_practice_(\d+)"))
+async def admin_update_practice(client, callback_query):
+    user_tell_id = callback_query.from_user.id
+    practice_id = int(callback_query.data.split("_")[-1])
+
+    await callback_query.message.delete()
+
+    await callback_query.message.reply_text(
+        "با فرمت زیر اطلاعات را وارد کنید:\n"
+        "عنوان\n"
+        "متن سوال\n"
+        "تاریخ شروع - تاریخ پایان\n"
+        "اگه فقط یک تاریخ وارد شود امروز بعنوان تاریخ شروع درنظر گرفته میشود!"
+        "\n<b>فرمت تاریخ: روز/ماه/سال</b>\n\n"
+        "مثال:"
+        "<i>\nexample-title\nexample-caption\n10/3/2024-15/3/2024</i>",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("exit!", callback_data=f"back_home")]
+        ])
+    )
+    await callback_query.message.reply_text(
+        "<b>***Just send as a reply to this message***</b>",
+        reply_markup=ForceReply(selective=True)
+    )
+
+    @app.on_message(filters.reply & filters.text & filters.user(user_tell_id))
+    async def get_update_practice(client, message):
+        data = message.text.split("\n")
+
+        if len(data) == 3 and 1 <= len(data[2].split("-")) <= 2:
+            title = data[0]
+            caption = data[1]
+
+            all_date = data[2].split("-")
+            if len(all_date) == 2:
+                db.Practice().update(practice_id, title, caption, start_date=all_date[0], end_date=all_date[1])
+            else:
+                db.Practice().update(practice_id, title, caption, end_date=all_date[0])
+
+            await message.reply_to_message.delete()
+
+            app.remove_handler(get_update_practice)
+            await message.reply_text("تمرین با موفقیت ویرایش شد.")
+
+            await send_home_message_admin(message)
+            return
+
+        await message.reply_text("No!, try again.",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("exit!", callback_data=f"back_home")
+        ]]))
+
+    # Add the handler
+    app.add_handler(get_update_practice)
 
 
 @app.on_message(filters.regex("تمرین‌های فعال") & filters.user(ADMINS_LIST_ID))
@@ -191,9 +252,64 @@ async def admin_select_practice(client, callback_query: CallbackQuery):
         f"تعداد یوزرهایی که پاسخ داده‌اند: {practice[2]}\n"
         f"تعداد پاسخ‌هایی که تصحیح شده‌اند: {practice[3]}",
         reply_markup=InlineKeyboardMarkup([
-        [InlineKeyboardButton("حذف تمرین", callback_data=f"admin_delete_practice_{practice_id}")],
-        [InlineKeyboardButton("exit!", callback_data=f"back_home")]
+            [InlineKeyboardButton("حذف تمرین", callback_data=f"admin_delete_practice_{practice_id}"), InlineKeyboardButton("ویرایش تمرین", callback_data=f"admin_update_practice_{practice_id}")],
+            [InlineKeyboardButton("مشاهده تکالیف", callback_data=f"admin_user_practice_list_{practice_id}_0")],
+            [InlineKeyboardButton("exit!", callback_data=f"back_home")]
         ])
+    )
+
+
+@app.on_callback_query(filters.regex(r"admin_user_practice_list_(\d+)") & filters.user(ADMINS_LIST_ID))
+async def admin_select_practice(client, callback_query: CallbackQuery):
+    practice_id, page = [int(i) for i in (callback_query.data.split("_")[4:6])]
+    practices = db.UserPractice().read_with_practice_id(practice_id)
+    practice = db.Practice().report(pk=practice_id)
+
+    await callback_query.message.delete()
+
+    if not practices:
+        await callback_query.message.reply_text("هیچ تمرین فعالی موجود نیست!")
+        return
+
+
+    await callback_query.message.reply_text(
+        f"عنوان: {practice[0]}\nمتن سوال: {practice[1]}\n"
+        f"تعداد یوزرهایی که پاسخ داده‌اند: {practice[2]}\n"
+        f"تعداد پاسخ‌هایی که تصحیح شده‌اند: {practice[3]}\n"
+        f"تکالیف ارسال شده:",
+        reply_markup=get_paginated_keyboard(practices, page, f"admin_user_practice_list_{practice_id}", "admin_select_user_practice")
+    )
+
+
+@app.on_callback_query(filters.regex(r"admin_select_user_practice_(\d+)") & filters.user(ADMINS_LIST_ID))
+async def admin_select_practice(client, callback_query: CallbackQuery):
+    user_practice_id = int(callback_query.data.split("_")[-1])
+    user_practice = db.UserPractice().read(pk=user_practice_id)
+
+    await callback_query.message.delete()
+
+    capt = "تصحیح نشده!"
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("عوض کردن معلم", callback_data=f"admin_select_none_teacher_user_{user_practice_id}")],
+        [InlineKeyboardButton("exit!", callback_data=f"back_home")]
+    ])
+    if user_practice.teacher_caption:
+        capt = (
+            "تصحیح شده.\n"
+            f"تصحیح: {user_practice.teacher_caption}"
+        )
+        markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton("exit!", callback_data=f"back_home")]
+        ])
+
+    await callback_query.message.reply_video(
+        video=user_practice.file_link,
+        caption=f"عنوان سوال: {user_practice.title}\n"
+        f"متن سوال: {user_practice.practice_caption}\n"
+        f"کاربر: {user_practice.practice_caption}\n"
+        f"کپشن کاربر:\n {user_practice.user_caption}\n"
+        f"وضعیت تصحیح: {capt}",
+        reply_markup=markup
     )
 
 
@@ -471,9 +587,118 @@ async def admin_teacher_selection(client, callback_query):
     await callback_query.message.delete()
 
     # media_id = callback_query.message.video.file_id
-    teacher = db.Teacher().read(pk=teacher_id)
-    await app.send_message(chat_id=teacher.chat_id, text="تمرین جدیدی به شما اختصاص یافت")
+    async def send_assignment_notification(teacher_id):
+        teacher = db.Teacher().read(pk=teacher_id)
+        await app.send_message(chat_id=teacher.chat_id, text="تمرین جدیدی به شما اختصاص یافت")
     # await app.send_video(chat_id=teacher[-1], video=media_id, caption=capt)
+    asyncio.create_task(send_assignment_notification(teacher_id))
+
+
+@app.on_message(filters.regex("اطلاع‌رسانی به کاربران") & filters.user(ADMINS_LIST_ID))
+async def admin_create_new_users_notif(client, message):
+    user_tell_id = message.from_user.id
+
+    await message.reply_text(
+        "متن اطلاعیه خود را ریپلی کنید:",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("exit!", callback_data=f"back_home")]
+        ])
+    )
+    await message.reply_text(
+        "<b>***Just send as a reply to this message***</b>",
+        reply_markup=ForceReply(selective=True)
+    )
+
+    @app.on_message(filters.reply & filters.text & filters.user(user_tell_id))
+    async def get_new_users_notif(client, message):
+        data = message.text
+
+        async def send_all_users_notification(data):
+            users = db.User().all()
+            for user in users:
+                await app.send_message(chat_id=user.chat_id, text=data)
+
+        asyncio.create_task(send_all_users_notification(data))
+        await message.reply_to_message.delete()
+        app.remove_handler(get_new_users_notif)
+        await message.reply_text("متن شما با موفقیت در صف تسک‌ها قرار گرفت.")
+        await send_home_message_admin(message)
+
+    # Add the handler
+    app.add_handler(get_new_users_notif)
+
+
+@app.on_message(filters.regex("اطلاع‌رسانی به معلمان") & filters.user(ADMINS_LIST_ID))
+async def admin_create_new_teacher_notif(client, message):
+    user_tell_id = message.from_user.id
+
+    await message.reply_text(
+        "متن اطلاعیه خود را ریپلی کنید:",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("exit!", callback_data=f"back_home")]
+        ])
+    )
+    await message.reply_text(
+        "<b>***Just send as a reply to this message***</b>",
+        reply_markup=ForceReply(selective=True)
+    )
+
+    @app.on_message(filters.reply & filters.text & filters.user(user_tell_id))
+    async def get_new_users_notif(client, message):
+        data = message.text
+
+        async def send_all_users_notification(data):
+            users = db.Teacher().all()
+            for user in users:
+                await app.send_message(chat_id=user.chat_id, text=data)
+
+        asyncio.create_task(send_all_users_notification(data))
+        await message.reply_to_message.delete()
+        app.remove_handler(get_new_users_notif)
+        await message.reply_text("متن شما با موفقیت در صف تسک‌ها قرار گرفت.")
+        await send_home_message_admin(message)
+
+    # Add the handler
+    app.add_handler(get_new_users_notif)
+
+
+@app.on_message(filters.regex("اطلاع‌رسانی به همه") & filters.user(ADMINS_LIST_ID))
+async def admin_create_new_teacher_notif(client, message):
+    user_tell_id = message.from_user.id
+
+    await message.reply_text(
+        "متن اطلاعیه خود را ریپلی کنید:",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("exit!", callback_data=f"back_home")]
+        ])
+    )
+    await message.reply_text(
+        "<b>***Just send as a reply to this message***</b>",
+        reply_markup=ForceReply(selective=True)
+    )
+
+    @app.on_message(filters.reply & filters.text & filters.user(user_tell_id))
+    async def get_new_users_notif(client, message):
+        data = message.text
+
+        async def send_all_users_notification(data):
+            for admin in ADMINS_LIST_ID:
+                await app.send_message(chat_id=admin, text=data)
+            teachers = db.Teacher().all()
+            for user in teachers:
+                await app.send_message(chat_id=user.chat_id, text=data)
+            users = db.User().all()
+            for user in users:
+                await app.send_message(chat_id=user.chat_id, text=data)
+
+        asyncio.create_task(send_all_users_notification(data))
+        await message.reply_to_message.delete()
+        app.remove_handler(get_new_users_notif)
+        await message.reply_text("متن شما با موفقیت در صف تسک‌ها قرار گرفت.")
+        await send_home_message_admin(message)
+
+    # Add the handler
+    app.add_handler(get_new_users_notif)
 
 
 ##### ------------------------------------------------------------------------------------- teacher
@@ -616,10 +841,13 @@ async def teacher_correction(client, callback_query):
         await message.reply_to_message.delete()
         app.remove_handler(set_teacher_caption)
 
-        await app.send_message(
-            chat_id=db.User().read_chat_id_user_with_user_practice_id(user_practice_id),
-            text=f"تمرین {user_practice_id} شما تصحیح شد."
-        )
+        async def send_user_correction_notification(user_practice_id):
+            await app.send_message(
+                chat_id=db.User().read_chat_id_user_with_user_practice_id(user_practice_id),
+                text=f"تمرین {user_practice_id} شما تصحیح شد."
+            )
+
+        asyncio.create_task(send_user_correction_notification(user_practice_id))
 
         await send_home_message_teacher(message)
 
@@ -736,9 +964,12 @@ async def user_upload(client, callback_query):
         #     keyboard.append([InlineKeyboardButton(teacher[-1], callback_data=f"set_user_practice_teacher_{teacher[0]}_{new_assignment_id}")])
 
         # reply_markup = InlineKeyboardMarkup(keyboard)
-        for i in ADMINS_LIST_ID:
-            # await app.send_video(chat_id=i, video=media_id, caption="لطفا برای این تمرین معلم تعیین کنید:", reply_markup=reply_markup)
-            await app.send_message(chat_id=i, text="تکلیف جدیدی آپلود شد!")
+        async def send_admin_notification():
+            for i in ADMINS_LIST_ID:
+                # await app.send_video(chat_id=i, video=media_id, caption="لطفا برای این تمرین معلم تعیین کنید:", reply_markup=reply_markup)
+                await app.send_message(chat_id=i, text="تکلیف جدیدی آپلود شد!")
+
+        asyncio.create_task(send_admin_notification())
 
     # Add the handler
     app.add_handler(get_upload)

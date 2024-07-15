@@ -59,3 +59,18 @@ class Practice:
         ).filter(PracticeModel.id == pk).first()
 
         return query
+
+    def update(self, pk, title, caption, end_date, start_date=datetime.datetime.now()):
+        if isinstance(start_date, str):
+            start_date = datetime.datetime.strptime(start_date, "%d/%m/%Y")
+        end_date = datetime.datetime.strptime(end_date, "%d/%m/%Y")
+
+        practice = self.session.query(PracticeModel).get(pk)
+        if practice:
+            practice.title = title
+            practice.caption = caption
+            practice.end_date = end_date
+            practice.start_date = start_date
+            self.session.commit()
+            return True
+        return False

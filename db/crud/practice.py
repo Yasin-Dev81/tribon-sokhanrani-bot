@@ -1,53 +1,61 @@
 import datetime
+from sqlalchemy import create_engine, func
+from sqlalchemy.orm import sessionmaker
 
-from .conn import Connection
+from ..models import Practice as PracticeModel, UserPractice as UserPracticeModel
+from config import SQLALCHEMY_DATABASE_URL
 
 
-class Practice(Connection):
-    def __init__(self) -> None:
-        super().__init__()
+class Practice:
+    def __init__(self):
+        self.engine = create_engine(SQLALCHEMY_DATABASE_URL)
+        Session = sessionmaker(bind=self.engine)
+        self.session = Session()
 
     def add(self, title, caption, end_date, start_date=datetime.datetime.now()):
-        # d - m - y
-        if type(start_date) == str:
+        # Convert start_date and end_date to datetime if they are strings
+        if isinstance(start_date, str):
             start_date = datetime.datetime.strptime(start_date, "%d/%m/%Y")
         end_date = datetime.datetime.strptime(end_date, "%d/%m/%Y")
 
-        with self.conn:
-            cursor = self.conn.cursor()
-            cursor.execute('INSERT INTO practice (title, caption, start_date, end_date) VALUES (?, ?, ?, ?)', (title, caption, start_date, end_date))
+        new_practice = PracticeModel(
+            title=title,
+            caption=caption,
+            start_date=start_date,
+            end_date=end_date
+        )
+        self.session.add(new_practice)
+        self.session.commit()
 
     def delete(self, pk):
-        with self.conn:
-            cursor = self.conn.cursor()
-            cursor.execute('DELETE FROM practice WHERE id = ?', (pk,))
+        practice = self.session.query(PracticeModel).get(pk)
+        if practice:
+            self.session.delete(practice)
+            self.session.commit()
 
     def read(self, pk):
-        cursor = self.conn.cursor()
-        cursor.execute('SELECT * FROM practice WHERE id = ?', (pk,))
-        return cursor.fetchone()
+        return self.session.query(PracticeModel).get(pk)
 
     def available(self):
-        with self.conn:
-            cursor = self.conn.cursor()
-            current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            cursor.execute('SELECT id, title FROM practice WHERE start_date <= ? AND end_date >= ?', (current_time, current_time))
-            return cursor.fetchall()
+        current_time = datetime.datetime.now()
+        query = self.session.query(PracticeModel.id, PracticeModel.title).filter(
+            PracticeModel.start_date <= current_time,
+            PracticeModel.end_date >= current_time
+        )
+        return query.all()
 
     def all(self):
-        with self.conn:
-            cursor = self.conn.cursor()
-            cursor.execute('SELECT id, title FROM practice')
-            return cursor.fetchall()
+        return self.session.query(PracticeModel.id, PracticeModel.title).all()
 
     def report(self, pk):
-        query = """
-            SELECT p.title, p.caption, count(up.id) AS total_count, count(up.teacher_caption) AS teacher_caption_count
-            FROM user_practice up
-            LEFT JOIN practice p ON p.id = up.practice_id
-            WHERE up.practice_id = ?
-        """
-        with self.conn:
-            cursor = self.conn.cursor()
-            cursor.execute(query, (pk, ))
-            return cursor.fetchone()
+        total_count_subquery = self.session.query(func.count(UserPracticeModel.id)).filter(UserPracticeModel.practice_id == pk).scalar_subquery()
+        teacher_caption_count_subquery = self.session.query(func.count(UserPracticeModel.id)).filter(UserPracticeModel.practice_id == pk, UserPracticeModel.teacher_caption.isnot(None)).scalar_subquery()
+
+        query = self.session.query(
+            PracticeModel.title,
+            PracticeModel.caption,
+            total_count_subquery.label('total_count'),
+            teacher_caption_count_subquery.label('teacher_caption_count')
+        ).filter(PracticeModel.id == pk).first()
+
+        return query

@@ -1,22 +1,21 @@
 from pyrogram import Client, filters
 from pyrogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, ForceReply
-import datetime
+
 
 import db.crud as db
+from config import ADMINS_LIST_ID, GROUP_CHAT_ID
 from home import send_home_message_admin, send_home_message_teacher, send_home_message_user
-
+from pagination import get_paginated_keyboard, users_paginated_keyboard, teachers_paginated_keyboard, none_teacher_paginated_keyboard
 
 
 # BOT_TOKEN = "7005827895:AAEd4wtyF-oOftIoNG0PSV0dK4yGZR7fhek"
 # api_id = 22868863
 # api_hash = "6388e9db9f2febffe4ebf0955ccb8345"
-ADMINS_LIST_ID = [713775832, 1024669168]
-CHANEL_CHAT_ID = "-1002218177926"
-GROUP_CHAT_ID = "-1002218303002"
+
 
 
 app = Client(
-    "./tel-token/ah-score"
+    "./var/ah-score"
     # api_id=api_id, api_hash=api_hash,
     # bot_token=BOT_TOKEN
 )
@@ -29,9 +28,10 @@ async def start(client, message):
         return
 
     teacher_row = db.Teacher().read_with_tell_id(tell_id=message.from_user.id)
+    print(teacher_row)
     if teacher_row:
         await send_home_message_teacher(message)
-        if not teacher_row[2]:
+        if not teacher_row.chat_id:
             name = []
             if message.from_user.first_name:
                 name.append(message.from_user.first_name)
@@ -58,20 +58,23 @@ async def start(client, message):
 
 @app.on_message(filters.contact)
 async def contact(client, message):
-    # When the user shares their contact, process it here
+    # data
     user_phone_number = message.contact.phone_number
+    name = []
+    if message.from_user.first_name:
+        name.append(message.from_user.first_name)
+    if message.from_user.last_name:
+        name.append(message.from_user.last_name)
 
-    # Check if the phone number exists in the user table
-    row = db.User().read_with_phone_number(phone_number=user_phone_number)
+    # db
+    status = db.User().update_with_phone_number(
+        phone_number=user_phone_number,
+        tell_id=message.from_user.id,
+        chat_id=message.chat.id,
+        name=" ".join(name)
+    )
 
-    if row:
-        # Update the user's tell_id with the current chat ID
-        name = []
-        if message.from_user.first_name:
-            name.append(message.from_user.first_name)
-        if message.from_user.last_name:
-            name.append(message.from_user.last_name)
-        db.User().update(pk=row[0], tell_id=message.from_user.id, chat_id=message.chat.id, name=" ".join(name))
+    if status:
         await send_home_message_user(message)
     else:
         await message.reply_text("No Access, Please send message to admin!")
@@ -149,13 +152,14 @@ async def admin_available_practices(client, message):
         await message.reply_text("هیچ تمرین فعالی موجود نیست!")
         return
 
-    # Create inline keyboard with practices
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton(title, callback_data=f"admin_select_practice_{practice_id}")]
-        for practice_id, title in practices
-    ]+[[InlineKeyboardButton("exit!", callback_data=f"back_home")]])
+    await message.reply_text("تمارین فعال:", reply_markup=get_paginated_keyboard(practices, 0, "admin_active_practices_page", "admin_select_practice"))
 
-    await message.reply_text("تمارین فعال:", reply_markup=keyboard)
+
+@app.on_callback_query(filters.regex(r"admin_active_practices_page_(\d+)"))
+async def paginate_active_practices(client, callback_query):
+    page = int(callback_query.data.split("_")[-1])
+    practices = db.Practice().available()
+    await callback_query.message.edit_reply_markup(reply_markup=get_paginated_keyboard(practices, page, "admin_active_practices_page", "admin_select_practice"))
 
 
 @app.on_message(filters.regex("تمامی تمرین‌ها") & filters.user(ADMINS_LIST_ID))
@@ -165,23 +169,20 @@ async def admin_all_practices(client, message):
         await message.reply_text("هیچ تمرین فعالی موجود نیست!")
         return
 
-    # Create inline keyboard with practices
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton(title, callback_data=f"admin_select_practice_{practice_id}")]
-        for practice_id, title in practices
-    ]+[[InlineKeyboardButton("exit!", callback_data=f"back_home")]])
+    await message.reply_text("تمامی تمارین:", reply_markup=get_paginated_keyboard(practices, 0, "admin_all_practices_page", "admin_select_practice"))
 
 
-    await message.reply_text("تمامی تمارین:", reply_markup=keyboard)
+@app.on_callback_query(filters.regex(r"admin_all_practices_page_(\d+)"))
+async def paginate_all_practices(client, callback_query):
+    page = int(callback_query.data.split("_")[-1])
+    practices = db.Practice().all()
+    await callback_query.message.edit_reply_markup(reply_markup=get_paginated_keyboard(practices, page, "admin_all_practices_page", "admin_select_practice"))
 
 
 @app.on_callback_query(filters.regex(r"admin_select_practice_(\d+)") & filters.user(ADMINS_LIST_ID))
 async def admin_select_practice(client, callback_query: CallbackQuery):
     practice_id = int(callback_query.data.split("_")[-1])
     practice = db.Practice().report(pk=practice_id)
-    if not practice[0]:
-        practice = list(db.Practice().read(pk=practice_id))[1:3]
-        practice += [0, 0]
 
     await callback_query.message.delete()
 
@@ -227,12 +228,14 @@ async def admin_all_users(client, message):
         await message.reply_text("هیچ یوزری نیست!")
         return
 
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton(f"{name} - {phone_num} - {'*' if bool(chat_id) else 'N'}", callback_data=f"admin_select_user_{user_id}")]
-        for user_id, _, phone_num, chat_id, name in users
-    ]+[[InlineKeyboardButton("exit!", callback_data=f"back_home")]])
+    await message.reply_text("تمامی یوزرها:", reply_markup=users_paginated_keyboard(users, 0, "admin_user_page", "admin_select_user"))
 
-    await message.reply_text("تمامی یوزرها:", reply_markup=keyboard)
+
+@app.on_callback_query(filters.regex(r"admin_user_page_(\d+)"))
+async def paginate_active_practices(client, callback_query):
+    page = int(callback_query.data.split("_")[-1])
+    practices = db.User().all()
+    await callback_query.message.edit_reply_markup(reply_markup=users_paginated_keyboard(practices, page, "admin_user_page", "admin_select_user"))
 
 
 @app.on_callback_query(filters.regex(r"admin_select_user_(\d+)") & filters.user(ADMINS_LIST_ID))
@@ -242,7 +245,7 @@ async def admin_select_user(client, callback_query: CallbackQuery):
     await callback_query.message.delete()
 
     await callback_query.message.reply_text(
-        f"id #{user_id}\nPhone: {user[2]}\nTelegram ID: {user[1]}"
+        f"id #{user.id}\nPhone: {user.phone_number}\nTelegram ID: {user.tell_id}\n"
         "تعداد تمارینی که تحویل داده: xxx",
         reply_markup=InlineKeyboardMarkup([
         [InlineKeyboardButton("حذف یوزر", callback_data=f"admin_delete_user_{user_id}")],
@@ -321,12 +324,14 @@ async def admin_all_teachers(client, message):
         await message.reply_text("هیچ معلمی نیست!")
         return
 
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton(f"{user_id} - {name}", callback_data=f"admin_select_teacher_{user_id}")]
-        for user_id, _, _, name in users
-    ]+[[InlineKeyboardButton("exit!", callback_data=f"back_home")]])
+    await message.reply_text("تمامی معلم‌ها:", reply_markup=teachers_paginated_keyboard(users, 0, "admin_teacher_page", "admin_select_teacher"))
 
-    await message.reply_text("تمامی معلم‌ها:", reply_markup=keyboard)
+
+@app.on_callback_query(filters.regex(r"admin_teacher_page_(\d+)"))
+async def paginate_active_practices(client, callback_query):
+    page = int(callback_query.data.split("_")[-1])
+    practices = db.Teacher().all()
+    await callback_query.message.edit_reply_markup(reply_markup=users_paginated_keyboard(practices, page, "admin_teacher_page", "admin_select_user"))
 
 
 @app.on_callback_query(filters.regex(r"admin_select_teacher_(\d+)") & filters.user(ADMINS_LIST_ID))
@@ -336,7 +341,7 @@ async def admin_select_teacher(client, callback_query: CallbackQuery):
     await callback_query.message.delete()
 
     await callback_query.message.reply_text(
-        f"id #{user_id}\nTelegram ID: {user[1]}"
+        f"id #{user.id}\nTelegram ID: {user.tell_id}\n"
         "تعداد تمارینی که تصحیح کرده: xxx",
         reply_markup=InlineKeyboardMarkup([
         [InlineKeyboardButton("حذف معلم", callback_data=f"admin_delete_teacher_{user_id}")],
@@ -410,8 +415,47 @@ async def admin_add_teacher(client, message):
 
 
 @app.on_message(filters.regex("my settings") & filters.user(ADMINS_LIST_ID))
-async def admin_create_new_practice(client, message):
-    await message.reply(f"You are admin and your tell-id is {message.from_user.id}")
+async def admin_my_settings(client, message):
+    await message.reply(f"You are <b>admin</b> and your tell-id is <i>{message.from_user.id}</i>")
+
+
+@app.on_message(filters.regex("تکالیف بدون معلم") & filters.user(ADMINS_LIST_ID))
+async def admin_user_practice_none_teacher(client, message):
+    practices = db.UserPractice().read_none_teacher()
+    if not practices:
+        await message.reply_text("هیچ تکلیفی موجود نیست!")
+        return
+
+    await message.reply_text("تکالیف بدون معلم:", reply_markup=none_teacher_paginated_keyboard(practices, 0, "admin_practices_none_teacher_page", "admin_select_none_teacher_user"))
+
+
+@app.on_callback_query(filters.regex(r"admin_practices_none_teacher_page_(\d+)"))
+async def paginate_practices_none_teacher(client, callback_query):
+    page = int(callback_query.data.split("_")[-1])
+    practices = db.UserPractice().read_none_teacher()
+    await callback_query.message.edit_reply_markup(reply_markup=none_teacher_paginated_keyboard(practices, page, "admin_practices_none_teacher_page", "admin_select_none_teacher_user"))
+
+
+@app.on_callback_query(filters.regex(r"admin_select_none_teacher_user_(\d+)") & filters.user(ADMINS_LIST_ID))
+async def admin_select_user(client, callback_query: CallbackQuery):
+    user_practice_id = int(callback_query.data.split("_")[-1])
+    user_practice = db.UserPractice().read(pk=user_practice_id)
+    await callback_query.message.delete()
+
+    # print(user_practice.file_link)
+    teacher_list = db.Teacher().availble()
+    keyboard = []
+    for teacher in teacher_list:
+        keyboard.append([InlineKeyboardButton(teacher.name, callback_data=f"set_user_practice_teacher_{teacher.id}_{user_practice_id}")])
+    keyboard.append([InlineKeyboardButton("exit!", callback_data=f"back_home")])
+
+    await callback_query.message.reply_video(
+        video=user_practice.file_link,
+        caption="لطفا یک معلم برای این تمرین انتخاب کن:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+    # await callback_query.message.reply_text("بصبر داش")
 
 
 @app.on_callback_query(filters.regex(r"^set_user_practice_teacher_(\d+)|teacher_pass$") and filters.user(ADMINS_LIST_ID))
@@ -422,18 +466,13 @@ async def admin_teacher_selection(client, callback_query):
 
     # Update the message to remove the inline keyboard
     # await callback_query.message.edit_reply_markup(reply_markup=None)
+    await callback_query.message.reply_text("تکلیف با موفقیت تخصیص یافت.")
+
     await callback_query.message.delete()
 
     # media_id = callback_query.message.video.file_id
     teacher = db.Teacher().read(pk=teacher_id)
-    # user_practice = db.UserPractice().read(pk=new_assignment_id)
-    # capt = (
-    #     f"#id <i>{new_assignment_id}</i>\n---\n"
-    #     f"from user {user_practice[1]}\n"
-    #     f"user caption: {user_practice[2]}"
-    #     # "*send as reply*"
-    # )
-    await app.send_message(chat_id=teacher[-1], text="تمرین جدیدی به شما اختصاص یافت")
+    await app.send_message(chat_id=teacher.chat_id, text="تمرین جدیدی به شما اختصاص یافت")
     # await app.send_video(chat_id=teacher[-1], video=media_id, caption=capt)
 
 
@@ -450,13 +489,14 @@ async def teacher_available_practices(client, message):
         await message.reply_text("هیچ تمرین فعالی موجود نیست!")
         return
 
-    # Create inline keyboard with practices
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton(title, callback_data=f"teacher_select_practice_{practice_id}")]
-        for practice_id, title in practices
-    ]+[[InlineKeyboardButton("exit!", callback_data=f"back_home")]])
+    await message.reply_text("تمارین فعال:", reply_markup=get_paginated_keyboard(practices, 0, "teacher_active_practices_page", "teacher_select_practice"))
 
-    await message.reply_text("تمارین فعال:", reply_markup=keyboard)
+
+@app.on_callback_query(filters.regex(r"teacher_active_practices_page_(\d+)"))
+async def teacher_paginate_active_practices(client, callback_query):
+    page = int(callback_query.data.split("_")[-1])
+    practices = db.Practice().available()
+    await callback_query.message.edit_reply_markup(reply_markup=get_paginated_keyboard(practices, page, "teacher_active_practices_page", "teacher_select_practice"))
 
 
 @app.on_message(filters.regex("تمامی تمرین‌ها") & filters.create(is_teacher))
@@ -466,32 +506,35 @@ async def teacher_all_practices(client, message):
         await message.reply_text("هیچ تمرین فعالی موجود نیست!")
         return
 
-    # Create inline keyboard with practices
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton(title, callback_data=f"teacher_select_practice_{practice_id}")]
-        for practice_id, title in practices
-    ]+[[InlineKeyboardButton("exit!", callback_data=f"back_home")]])
+    await message.reply_text("تمامی تمارین:", reply_markup=get_paginated_keyboard(practices, 0, "teacher_all_practices_page", "teacher_select_practice"))
 
 
-    await message.reply_text("تمامی تمارین:", reply_markup=keyboard)
+@app.on_callback_query(filters.regex(r"teacher_all_practices_page_(\d+)"))
+async def teacher_paginate_all_practices(client, callback_query):
+    page = int(callback_query.data.split("_")[-1])
+    practices = db.Practice().available()
+    await callback_query.message.edit_reply_markup(reply_markup=get_paginated_keyboard(practices, page, "teacher_all_practices_page", "teacher_select_practice"))
 
 
+#### optimize
 @app.on_callback_query(filters.regex(r"teacher_select_practice_(\d+)") & filters.create(is_teacher))
 async def teacher_select_practice(client, callback_query: CallbackQuery):
     practice_id = int(callback_query.data.split("_")[-1])
     practice = db.Practice().read(pk=practice_id)
     users_practice = db.UserPractice().read_with_teacher_tell_id(teacher_tell_id=callback_query.from_user.id, practice_id=practice_id)
     await callback_query.message.delete()
+    print(users_practice)
 
     await callback_query.message.reply_text(
-        f"عنوان: {practice[1]}\nمتن سوال: {practice[2]}"
+        f"عنوان: {practice.title}\nمتن سوال: {practice.caption}"
         "\nتصحیح نشده‌ها:",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"user {i[1]}", callback_data=f"teacher_user_practice_{i[0]}")] for i in users_practice
+            [InlineKeyboardButton(f"user {i.user_id}", callback_data=f"teacher_user_practice_{i.id}")] for i in users_practice
         ]+[[InlineKeyboardButton("exit!", callback_data=f"back_home")]])
     )
 
 
+#### optimize
 @app.on_callback_query(filters.regex(r"teacher_user_practice_(\d+)") & filters.create(is_teacher))
 async def teacher_user_practice(client, callback_query: CallbackQuery):
     user_practice_id = int(callback_query.data.split("_")[-1])
@@ -499,25 +542,27 @@ async def teacher_user_practice(client, callback_query: CallbackQuery):
     await callback_query.message.delete()
 
     capt = "تصحیح نشده!"
-    if user_practice[6]:
+    if user_practice.teacher_caption:
         capt = (
             "تصحیح شده.\n"
-            f"تصحیح: {user_practice[6]}"
+            f"تصحیح: {user_practice.teacher_caption}"
         )
 
 
     await callback_query.message.reply_video(
-        video=user_practice[3],
-        caption=f"عنوان سوال: {user_practice[8]}\n"
-        f"متن سوال: {user_practice[9]}\n"
-        f"کپشن کاربر:\n {user_practice[2]}\n"
+        video=user_practice.file_link,
+        caption=f"عنوان سوال: {user_practice.title}\n"
+        f"متن سوال: {user_practice.practice_caption}\n"
+        f"کاربر: {user_practice.practice_caption}\n"
+        f"کپشن کاربر:\n {user_practice.user_caption}\n"
         f"وضعیت تصحیح: {capt}",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("تصحیح مجدد" if user_practice[6] else "تصحیح", callback_data=f"teacher_correction_{user_practice_id}")],
+            [InlineKeyboardButton("تصحیح مجدد" if user_practice.teacher_caption else "تصحیح", callback_data=f"teacher_correction_{user_practice_id}")],
             [InlineKeyboardButton("exit!", callback_data=f"back_home")]
         ])
     )
 
+#### optimize and pagination
 @app.on_message(filters.regex("تصحیح شده‌ها") & filters.create(is_teacher))
 async def teacher_create_new_practice(client, message):
     users_practice = db.UserPractice().read_with_teacher_tell_id(teacher_tell_id=message.from_user.id, correction=True)
@@ -525,11 +570,12 @@ async def teacher_create_new_practice(client, message):
     await message.reply_text(
         "\nتصحیح شده‌ها:",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"user {i[1]}", callback_data=f"teacher_user_practice_{i[0]}")] for i in users_practice
+            [InlineKeyboardButton(f"user {i.user_id}", callback_data=f"teacher_user_practice_{i.id}")] for i in users_practice
         ]+[[InlineKeyboardButton("exit!", callback_data=f"back_home")]])
     )
 
 
+#### optimize and pagination
 @app.on_message(filters.regex("تمرین‌های نیازمند به تصحیح") & filters.create(is_teacher))
 async def teacher_create_new_practice(client, message):
     users_practice = db.UserPractice().read_with_teacher_tell_id(teacher_tell_id=message.from_user.id)
@@ -537,7 +583,7 @@ async def teacher_create_new_practice(client, message):
     await message.reply_text(
         "\nتصحیح نشده‌ها:",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"user {i[1]}", callback_data=f"teacher_user_practice_{i[0]}")] for i in users_practice
+            [InlineKeyboardButton(f"user {i.user_id}", callback_data=f"teacher_user_practice_{i.id}")] for i in users_practice
         ]+[[InlineKeyboardButton("exit!", callback_data=f"back_home")]])
     )
 
@@ -545,7 +591,7 @@ async def teacher_create_new_practice(client, message):
 @app.on_message(filters.regex("my settings") & filters.create(is_teacher))
 async def teacher_create_new_practice(client, message):
     teacher = db.Teacher().read_with_tell_id(tell_id=message.from_user.id)
-    await message.reply(f"You are teacher and your id is {teacher[0]}")
+    await message.reply(f"You are <b>teacher</b> and your id is {teacher[0]}")
 
 
 @app.on_callback_query(filters.regex(r"teacher_correction_(\d+)") & filters.create(is_teacher))
@@ -594,42 +640,46 @@ async def user_available_practices(client, message):
         await message.reply_text("هیچ تمرین فعالی موجود نیست!")
         return
 
-    # Create inline keyboard with practices
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("%s - %s"%(practice_id, title), callback_data=f"user_select_practice_{practice_id}")]
-        for practice_id, title in practices
-    ]+[[InlineKeyboardButton("exit!", callback_data=f"back_home")]])
+    await message.reply_text("تمارین فعال:", reply_markup=get_paginated_keyboard(practices, 0, "user_practices_page", "user_select_practice"))
 
-    await message.reply_text("تمارین فعال:", reply_markup=keyboard)
+
+@app.on_callback_query(filters.regex(r"user_practices_page_(\d+)"))
+async def teacher_paginate_all_practices(client, callback_query):
+    page = int(callback_query.data.split("_")[-1])
+    practices = db.Practice().available()
+    await callback_query.message.edit_reply_markup(reply_markup=get_paginated_keyboard(practices, page, "user_practices_page", "user_select_practice"))
 
 
 @app.on_callback_query(filters.regex(r"user_select_practice_(\d+)") & filters.create(is_user))
 async def user_select_practice(client, callback_query: CallbackQuery):
     practice_id = int(callback_query.data.split("_")[-1])
     practice = db.Practice().read(pk=practice_id)
-    user_practice = db.UserPractice().read_with_practice_id(practice_id=practice_id)
+    user_practice = db.UserPractice().read_with_practice_id(practice_id=practice_id, tell_id=callback_query.from_user.id)
     await callback_query.message.delete()
 
     capt = "تحویل داده نشده!"
     markup = InlineKeyboardMarkup([
-                [InlineKeyboardButton("ویرایش تمرین", callback_data=f"user_reupload_{user_practice[0]}") if user_practice else InlineKeyboardButton("آپلود تمرین", callback_data=f"user_upload_{practice_id}")],
+                [InlineKeyboardButton("آپلود تمرین", callback_data=f"user_upload_{practice_id}")],
                 [InlineKeyboardButton("exit!", callback_data=f"back_home")],
             ])
     if user_practice:
-        if user_practice[-1]:
+        if user_practice.teacher_caption:
             capt = (
                 "تصحیح شده.\n"
-                f"بازخورد استاد: {user_practice[-1]}"
+                f"بازخورد استاد: {user_practice.teacher_caption}"
             )
             markup = InlineKeyboardMarkup([
                 [InlineKeyboardButton("exit!", callback_data=f"back_home")],
             ])
         else:
             capt = "در انتضار تصحیح"
+            markup = InlineKeyboardMarkup([
+                [InlineKeyboardButton("ویرایش تمرین", callback_data=f"user_reupload_{practice_id}")],
+                [InlineKeyboardButton("exit!", callback_data=f"back_home")],
+            ])
 
     await callback_query.message.reply_text(
-        f"عنوان: {practice[0]}\nمتن سوال: {practice[1]}"
-        f"کپشن شما: {practice[2]}"
+        f"عنوان: {practice.title}\nمتن سوال: {practice.caption}\n----"
         f"\nوضعیت نمره: {capt}",
         reply_markup=markup
     )
@@ -665,7 +715,7 @@ async def user_upload(client, callback_query):
         # Forward the video to the channel
         forwarded_message = await app.send_video(chat_id=GROUP_CHAT_ID, video=media_id, caption=capt)
         telegram_link = forwarded_message.video.file_id
-        user_id = db.User().read_with_tell_id(tell_id=user_tell_id)[0]
+        user_id = db.User().read_with_tell_id(tell_id=user_tell_id).id
 
         # Store the Telegram link in the database
         new_assignment_id = db.UserPractice().add(
@@ -680,14 +730,15 @@ async def user_upload(client, callback_query):
         await send_home_message_user(message)
         app.remove_handler(get_upload)
 
-        teacher_list = db.Teacher().all()
-        keyboard = []
-        for teacher in teacher_list:
-            keyboard.append([InlineKeyboardButton(teacher[-1], callback_data=f"set_user_practice_teacher_{teacher[0]}_{new_assignment_id}")])
+        # teacher_list = db.Teacher().all()
+        # keyboard = []
+        # for teacher in teacher_list:
+        #     keyboard.append([InlineKeyboardButton(teacher[-1], callback_data=f"set_user_practice_teacher_{teacher[0]}_{new_assignment_id}")])
 
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        # reply_markup = InlineKeyboardMarkup(keyboard)
         for i in ADMINS_LIST_ID:
-            await app.send_video(chat_id=i, video=media_id, caption="لطفا برای این تمرین معلم تعیین کنید:", reply_markup=reply_markup)
+            # await app.send_video(chat_id=i, video=media_id, caption="لطفا برای این تمرین معلم تعیین کنید:", reply_markup=reply_markup)
+            await app.send_message(chat_id=i, text="تکلیف جدیدی آپلود شد!")
 
     # Add the handler
     app.add_handler(get_upload)
@@ -757,20 +808,21 @@ async def uploaded_practices(client, message):
         await message.reply_text("هیچ تمرین تحویل داده شده‌ای موجود نیست!")
         return
 
-    # Create inline keyboard with practices
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton(i[1], callback_data=f"user_select_practice_{i[0]}")]
-        for i in user_practices
-    ]+[[InlineKeyboardButton("exit!", callback_data=f"back_home")]])
+    await message.reply_text("تکالیف تحویل داده شده:", reply_markup=get_paginated_keyboard(user_practices, 0, "user_user_practices_page", "user_select_practice"))
 
-    await message.reply_text("تمارین تحویل داده شده:", reply_markup=keyboard)
+
+@app.on_callback_query(filters.regex(r"user_user_practices_page_(\d+)"))
+async def teacher_paginate_all_practices(client, callback_query):
+    page = int(callback_query.data.split("_")[-1])
+    practices = db.UserPractice().read_with_user_tell_id(callback_query.from_user.id)
+    await callback_query.message.edit_reply_markup(reply_markup=get_paginated_keyboard(practices, page, "user_user_practices_page", "user_select_practice"))
 
 
 
 @app.on_message(filters.regex("my settings") & filters.create(is_user))
 async def user_settings(client, message):
     user = db.User().read_with_tell_id(tell_id=message.from_user.id)
-    await message.reply(f"You are user and your id is {user[0]}")
+    await message.reply(f"You are <b>user</b> and your id is <i>{user.id}</i>")
 
 
 app.run()

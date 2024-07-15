@@ -1,0 +1,5 @@
+services:
+  ah-score:
+    image: yasindev/ah-score:1.0.0
+    env_file: env-rank
+    network_mode: host

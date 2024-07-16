@@ -21,5 +21,5 @@ EXPOSE 80
 # ENV GROUP_CHAT_ID=-1002218303002
 
 # Run the bot when the container launches
-# RUN ["python", "db/migrate/create_db.py"]
+RUN ["python", "migrate.py"]
 CMD ["python", "main.py"]

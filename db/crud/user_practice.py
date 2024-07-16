@@ -1,127 +1,138 @@
 import datetime
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
-from .conn import Connection
+from ..models import UserPractice as UserPracticeModel, Practice as PracticeModel, Teacher as TeacherModel, User as UserModel
+from config import SQLALCHEMY_DATABASE_URL
 
 
-class UserPractice(Connection):
-    def __init__(self) -> None:
-        super().__init__()
+class UserPractice:
+    def __init__(self):
+        self.engine = create_engine(SQLALCHEMY_DATABASE_URL)
+        Session = sessionmaker(bind=self.engine)
+        self.session = Session()
 
     def add(self, user_id, file_link, practice_id, user_caption=None):
-        cursor = self.conn.cursor()
-        cursor.execute('INSERT INTO user_practice (user_id, file_link, practice_id, user_caption) VALUES (?, ?, ?, ?)', (user_id, file_link, practice_id, user_caption))
-        self.conn.commit()
-        new_id = cursor.lastrowid
-        # self.conn.close()
-        return new_id
+        new_user_practice = UserPracticeModel(
+            user_id=user_id,
+            file_link=file_link,
+            practice_id=practice_id,
+            user_caption=user_caption
+        )
+        self.session.add(new_user_practice)
+        self.session.commit()
+        return new_user_practice.id
 
     def delete(self, pk):
-        cursor = self.conn.cursor()
-        cursor.execute('DELETE FROM user_practice WHERE id = ?', (pk,))
-        self.conn.commit()
-        # self.conn.close()
+        user_practice = self.session.query(UserPracticeModel).get(pk)
+        if user_practice:
+            self.session.delete(user_practice)
+            self.session.commit()
 
     def read(self, pk):
-        cursor = self.conn.cursor()
-        query = """
-            SELECT *
-            FROM user_practice up
-            LEFT JOIN practice p ON p.id = up.practice_id
-            WHERE up.id = ?
-        """
-        cursor.execute(query, (pk,))
-        row = cursor.fetchone()
-        # self.conn.close()
-        return row
+        query = self.session.query(
+            UserPracticeModel.id.label("id"),
+            UserModel.name.label("username"),
+            UserPracticeModel.file_link.label("file_link"),
+            UserPracticeModel.user_caption.label("user_caption"),
+            UserPracticeModel.teacher_caption.label("teacher_caption"),
+            PracticeModel.title.label("title"),
+            PracticeModel.caption.label("practice_caption"),
+            UserPracticeModel.practice_id.label("practice_id")
+        ).join(
+            PracticeModel, PracticeModel.id == UserPracticeModel.practice_id
+        ).join(
+            UserModel, UserModel.id == UserPracticeModel.user_id
+        ).filter(UserPracticeModel.id == pk)
+        return query.first()
 
-    def read_with_practice_id(self, practice_id):
-        with self.conn:
-            cursor = self.conn.cursor()
-            query = """
-                SELECT title, caption, user_caption, teacher_caption
-                FROM user_practice up
-                LEFT JOIN practice p ON p.id = up.practice_id
-                WHERE practice_id = ?
-            """
-            cursor.execute(query, (practice_id,))
-            row = cursor.fetchone()
-            # self.conn.close()
-            return row
+    def read_with_practice_id_single(self, practice_id, tell_id):
+        query = self.session.query(
+            PracticeModel.title, PracticeModel.caption,
+            UserPracticeModel.user_caption, UserPracticeModel.teacher_caption
+        ).join(
+            PracticeModel, PracticeModel.id == UserPracticeModel.practice_id
+        ).join(
+            UserModel, UserModel.id == UserPracticeModel.user_id
+        ).filter(
+            UserPracticeModel.practice_id == practice_id
+        ).filter(
+            UserModel.tell_id == tell_id
+        )
+        return query.first()
 
     def set_teacher(self, pk, teacher_id):
-        with self.conn:
-            cursor = self.conn.cursor()
-            cursor.execute('UPDATE user_practice SET teacher_id = ? WHERE id = ?', (teacher_id, pk))
-            self.conn.commit()
-            # self.conn.close()
+        user_practice = self.session.query(UserPracticeModel).get(pk)
+        if user_practice:
+            user_practice.teacher_id = teacher_id
+            self.session.commit()
 
     def set_teacher_caption(self, pk, teacher_caption):
-        with self.conn:
-            cursor = self.conn.cursor()
-            cursor.execute('UPDATE user_practice SET teacher_caption = ? WHERE id = ?', (teacher_caption, pk))
-            self.conn.commit()
+        user_practice = self.session.query(UserPracticeModel).get(pk)
+        if user_practice:
+            user_practice.teacher_caption = teacher_caption
+            self.session.commit()
 
     def update(self, pk, file_link, user_caption=None):
-        with self.conn:
-            cursor = self.conn.cursor()
-            if user_caption is None:
-                cursor.execute('UPDATE user_practice SET file_link = ? WHERE id = ?', (file_link, pk))
-            else:
-                cursor.execute('UPDATE user_practice SET file_link = ?, user_caption = ? WHERE id = ?', (file_link, user_caption, pk))
-            self.conn.commit()
-            # self.conn.close()
-            return pk
+        user_practice = self.session.query(UserPracticeModel).get(pk)
+        if user_practice:
+            user_practice.file_link = file_link
+            if user_caption is not None:
+                user_practice.user_caption = user_caption
+            self.session.commit()
+        return pk
 
     def read_with_teacher_tell_id(self, teacher_tell_id, practice_id=None, correction=False):
-        with self.conn:
-            cursor = self.conn.cursor()
-            if practice_id:
-                if correction:
-                    query = """
-                        SELECT *
-                        FROM user_practice up
-                        LEFT JOIN teacher t ON t.id = up.teacher_id
-                        WHERE t.tell_id = ? AND up.practice_id = ? AND up.teacher_caption IS NOT NULL
-                    """
-                else:
-                    query = """
-                        SELECT *
-                        FROM user_practice up
-                        LEFT JOIN teacher t ON t.id = up.teacher_id
-                        WHERE t.tell_id = ? AND up.teacher_caption IS NULL AND up.practice_id = ?
-                    """
-                cursor.execute(query, (teacher_tell_id, practice_id))
-            else:
-                if correction:
-                    query = """
-                        SELECT *
-                        FROM user_practice up
-                        LEFT JOIN teacher t ON t.id = up.teacher_id
-                        WHERE t.tell_id = ? AND up.teacher_caption IS NOT NULL
-                    """
-                else:
-                    query = """
-                        SELECT *
-                        FROM user_practice up
-                        LEFT JOIN teacher t ON t.id = up.teacher_id
-                        WHERE t.tell_id = ? AND up.teacher_caption IS NULL
-                    """
-                cursor.execute(query, (teacher_tell_id,))
-            row = cursor.fetchall()
-            # self.conn.close()
-            return row
+        query = self.session.query(
+            UserPracticeModel
+        ).join(
+            TeacherModel, TeacherModel.id == UserPracticeModel.teacher_id
+        ).filter(TeacherModel.tell_id == teacher_tell_id)
+
+        if practice_id:
+            query = query.filter(UserPracticeModel.practice_id == practice_id)
+
+        if correction:
+            query = query.filter(UserPracticeModel.teacher_caption.isnot(None))
+        else:
+            query = query.filter(UserPracticeModel.teacher_caption.is_(None))
+
+        return query.all()
 
     def read_with_user_tell_id(self, user_tell_id):
-        with self.conn:
-            cursor = self.conn.cursor()
-            query = """
-                SELECT p.id, p.title
-                FROM user_practice up
-                LEFT JOIN user u ON u.id = up.user_id
-                LEFT JOIN practice p ON p.id = up.practice_id
-                WHERE u.tell_id = ?
-            """
-            cursor.execute(query, (user_tell_id,))
-            row = cursor.fetchall()
-            # self.conn.close()
-            return row
+        query = self.session.query(
+            PracticeModel.id, PracticeModel.title
+        ).join(
+            UserPracticeModel, PracticeModel.id == UserPracticeModel.practice_id
+        ).join(
+            UserModel, UserModel.id == UserPracticeModel.user_id
+        ).filter(UserModel.tell_id == user_tell_id)
+
+        return query.all()
+
+    def read_none_teacher(self):
+        query = self.session.query(
+            UserPracticeModel.id,
+            UserModel.name,
+            PracticeModel.title,
+            UserPracticeModel.file_link,
+            UserPracticeModel.user_caption
+        ).join(PracticeModel, UserPracticeModel.practice_id == PracticeModel.id, isouter=True)\
+        .join(UserModel, UserPracticeModel.user_id == UserModel.id, isouter=True)\
+        .filter(UserPracticeModel.teacher_id.is_(None))
+
+        return query.all()
+
+    def read_with_practice_id_all(self, practice_id):
+        query = self.session.query(
+            UserPracticeModel.id,
+            UserModel.name.label("title"),
+            UserPracticeModel.teacher_caption
+        ).join(
+            PracticeModel, UserPracticeModel.practice_id == PracticeModel.id
+        ).join(
+            UserModel, UserPracticeModel.user_id == UserModel.id
+        ).filter(
+            UserPracticeModel.practice_id == practice_id
+        )
+        return query.all()

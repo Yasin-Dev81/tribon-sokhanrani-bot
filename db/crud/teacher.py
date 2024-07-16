@@ -1,36 +1,42 @@
-from .conn import Connection
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
-class Teacher(Connection):
-    def __init__(self) -> None:
-        super().__init__()
+from ..models import Teacher as TeacherModel
+from config import SQLALCHEMY_DATABASE_URL
+
+
+class Teacher:
+    def __init__(self):
+        self.engine = create_engine(SQLALCHEMY_DATABASE_URL)
+        Session = sessionmaker(bind=self.engine)
+        self.session = Session()
 
     def add(self, tell_id, chat_id=None):
-        with self.conn:
-            cursor = self.conn.cursor()
-            cursor.execute('INSERT INTO teacher (tell_id, chat_id) VALUES (?, ?)', (tell_id, chat_id))
+        new_teacher = TeacherModel(tell_id=tell_id, chat_id=chat_id)
+        self.session.add(new_teacher)
+        self.session.commit()
 
     def delete(self, pk):
-        with self.conn:
-            cursor = self.conn.cursor()
-            cursor.execute('DELETE FROM teacher WHERE id = ?', (pk,))
+        teacher = self.session.query(TeacherModel).get(pk)
+        if teacher:
+            self.session.delete(teacher)
+            self.session.commit()
 
     def read(self, pk):
-        with self.conn:
-            cursor = self.conn.cursor()
-            cursor.execute('SELECT * FROM teacher WHERE id = ?', (pk,))
-            return cursor.fetchone()
+        return self.session.query(TeacherModel).get(pk)
 
     def all(self):
-        cursor = self.conn.cursor()
-        cursor.execute('SELECT * FROM teacher')
-        return cursor.fetchall()
+        return self.session.query(TeacherModel).all()
+
+    def availble(self):
+        return self.session.query(TeacherModel).filter(TeacherModel.chat_id.is_not(None)).all()
 
     def read_with_tell_id(self, tell_id):
-        cursor = self.conn.cursor()
-        cursor.execute('SELECT * FROM teacher WHERE tell_id = ?', (tell_id,))
-        return cursor.fetchone()
+        return self.session.query(TeacherModel).filter_by(tell_id=tell_id).first()
 
     def update_with_tell_id(self, tell_id, chat_id, name):
-        with self.conn:
-            cursor = self.conn.cursor()
-            cursor.execute('UPDATE teacher SET chat_id = ?, name = ? WHERE tell_id = ?', (chat_id, name, tell_id))
+        teacher = self.session.query(TeacherModel).filter_by(tell_id=tell_id).first()
+        if teacher:
+            teacher.chat_id = chat_id
+            teacher.name = name
+            self.session.commit()

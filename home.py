@@ -25,7 +25,7 @@ async def send_home_message_teacher(message):
         "\n<b>AH-score</b> <i>v3.1</i>",
         reply_markup=ReplyKeyboardMarkup(
             [
-                ["تمرین‌های نیازمند به تصحیح"],
+                ["تکالیف نیازمند به تصحیح"],
                 ["تمرین‌های فعال", "تمامی تمرین‌ها", "تصحیح شده‌ها"],
                 ["my settings"]
             ],

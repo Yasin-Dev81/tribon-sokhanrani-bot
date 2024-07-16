@@ -37,7 +37,8 @@ class UserPractice:
             UserPracticeModel.user_caption.label("user_caption"),
             UserPracticeModel.teacher_caption.label("teacher_caption"),
             PracticeModel.title.label("title"),
-            PracticeModel.caption.label("practice_caption")
+            PracticeModel.caption.label("practice_caption"),
+            UserPracticeModel.practice_id.label("practice_id")
         ).join(
             PracticeModel, PracticeModel.id == UserPracticeModel.practice_id
         ).join(
@@ -45,7 +46,7 @@ class UserPractice:
         ).filter(UserPracticeModel.id == pk)
         return query.first()
 
-    def read_with_practice_id(self, practice_id, tell_id):
+    def read_with_practice_id_single(self, practice_id, tell_id):
         query = self.session.query(
             PracticeModel.title, PracticeModel.caption,
             UserPracticeModel.user_caption, UserPracticeModel.teacher_caption
@@ -82,7 +83,9 @@ class UserPractice:
         return pk
 
     def read_with_teacher_tell_id(self, teacher_tell_id, practice_id=None, correction=False):
-        query = self.session.query(UserPracticeModel).join(
+        query = self.session.query(
+            UserPracticeModel
+        ).join(
             TeacherModel, TeacherModel.id == UserPracticeModel.teacher_id
         ).filter(TeacherModel.tell_id == teacher_tell_id)
 
@@ -120,10 +123,11 @@ class UserPractice:
 
         return query.all()
 
-    def read_with_practice_id(self, practice_id):
+    def read_with_practice_id_all(self, practice_id):
         query = self.session.query(
             UserPracticeModel.id,
-            UserModel.name
+            UserModel.name.label("title"),
+            UserPracticeModel.teacher_caption
         ).join(
             PracticeModel, UserPracticeModel.practice_id == PracticeModel.id
         ).join(

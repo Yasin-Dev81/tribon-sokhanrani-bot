@@ -49,7 +49,8 @@ class UserPractice:
     def read_with_practice_id_single(self, practice_id, tell_id):
         query = self.session.query(
             PracticeModel.title, PracticeModel.caption,
-            UserPracticeModel.user_caption, UserPracticeModel.teacher_caption
+            UserPracticeModel.user_caption, UserPracticeModel.teacher_caption,
+            UserPracticeModel.id
         ).join(
             PracticeModel, PracticeModel.id == UserPracticeModel.practice_id
         ).join(

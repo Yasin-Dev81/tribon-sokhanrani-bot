@@ -1,5 +1,8 @@
 services:
   ah-score:
-    image: yasindev/ah-score:1.0.0
-    env_file: env-rank
+    image: yasindev/ah-score:4.4
+    env_file: .env
     network_mode: host
+    volumes:
+      - "/var/lib/tribon_sokhanrani:/var/lib/tribon_sokhanrani"
+

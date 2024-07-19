@@ -2,3 +2,4 @@ python-dotenv==1.0.0
 Pyrogram==2.0.106
 python-decouple==3.6
 SQLAlchemy==2.0.31
+TgCrypto==1.2.5

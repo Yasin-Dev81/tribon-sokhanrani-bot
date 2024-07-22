@@ -74,12 +74,13 @@ class ActivePractice:
             in update.reply_to_message.text
         )
 
-    @property
-    def practices(self):
+    def practices(self, user_tell_id):
         current_time = datetime.datetime.now()
         practices = (
             db.session.query(db.PracticeModel.id, db.PracticeModel.title)
+            .join(db.UserModel, db.UserModel.user_type_id == db.PracticeModel.user_type_id)
             .filter(
+                db.UserModel.tell_id == user_tell_id,
                 db.PracticeModel.start_date <= current_time,
                 db.PracticeModel.end_date >= current_time,
             )
@@ -88,14 +89,15 @@ class ActivePractice:
         return practices
 
     async def list(self, client, message):
-        if not self.practices:
+        practices = self.practices(message.from_user.id)
+        if not practices:
             await message.reply_text("هیچ تمرین فعالی موجود نیست!")
             return
 
         await message.reply_text(
             "تمارین فعال:",
             reply_markup=get_paginated_keyboard(
-                self.practices,
+                practices,
                 0,
                 "user_active_practice_paginate_list",
                 "user_active_practice_select",
@@ -104,8 +106,9 @@ class ActivePractice:
 
     async def paginate_list(self, client, callback_query):
         page = int(callback_query.data.split("_")[-1])
+        practices = self.practices(callback_query.from_user.id)
 
-        if not self.practices:
+        if not practices:
             await callback_query.message.reply_text("هیچ تمرین فعالی موجود نیست!")
             return
 
@@ -114,7 +117,7 @@ class ActivePractice:
             await callback_query.message.reply_text(
                 "تمارین فعال:",
                 reply_markup=get_paginated_keyboard(
-                    self.practices,
+                    practices,
                     page,
                     "user_active_practice_paginate_list",
                     "user_active_practice_select",
@@ -124,7 +127,7 @@ class ActivePractice:
 
         await callback_query.message.edit_reply_markup(
             reply_markup=get_paginated_keyboard(
-                self.practices,
+                practices,
                 page,
                 "user_active_practice_paginate_list",
                 "user_active_practice_select",
@@ -133,14 +136,18 @@ class ActivePractice:
 
     @staticmethod
     def report_practice(pk):
-        practice = db.session.query(
-            db.PracticeModel.title,
-            db.PracticeModel.caption,
-            and_(
-                db.PracticeModel.start_date <= datetime.datetime.now(),
-                db.PracticeModel.end_date >= datetime.datetime.now(),
-            ).label("status"),
-        ).filter(db.PracticeModel.id == pk).first()
+        practice = (
+            db.session.query(
+                db.PracticeModel.title,
+                db.PracticeModel.caption,
+                and_(
+                    db.PracticeModel.start_date <= datetime.datetime.now(),
+                    db.PracticeModel.end_date >= datetime.datetime.now(),
+                ).label("status"),
+            )
+            .filter(db.PracticeModel.id == pk)
+            .first()
+        )
         return practice
 
     @staticmethod

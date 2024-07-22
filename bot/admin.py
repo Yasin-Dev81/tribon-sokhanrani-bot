@@ -30,6 +30,10 @@ class Practice:
             & filters.user(ADMINS_LIST_ID)
             & filters.create(self.is_new_practice_msg)
         )(self.get_new_practice)
+        self.app.on_callback_query(
+            filters.regex(r"admin_practice_set_type_(\d+)_(\d+)")
+            & filters.user(ADMINS_LIST_ID)
+        )(self.set_type)
 
     def is_new_practice_msg(filter, client, update):
         return (
@@ -86,14 +90,24 @@ class Practice:
 
             await message.reply_to_message.delete()
 
-            await message.reply_text("تمرین با موفقیت اضافه شد.")
-            asyncio.create_task(
-                self.send_alls_notification(
-                    client, new_practice_id, "تمرین جدید بارگذاری شد!"
-                )
+            # await message.reply_text("تمرین با موفقیت اضافه شد.")
+            await message.reply_text(
+                "لطفا نوع یوزر را انتخاب کنید:",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                i.name,
+                                callback_data=f"admin_practice_set_type_{i.id}_{new_practice_id}",
+                            )
+                            for i in db.session.query(db.UserTypeModel).all()
+                        ],
+                        [InlineKeyboardButton("exit!", callback_data="back_home")],
+                    ]
+                ),
             )
 
-            await send_home_message_admin(message)
+            # await send_home_message_admin(message)
             return
 
         await message.reply_text(
@@ -103,11 +117,14 @@ class Practice:
             ),
         )
 
-    @property
-    def users(self):
+    @staticmethod
+    def users(user_type_id):
+        if not isinstance(user_type_id, int):
+            user_type_id = int(user_type_id)
         return (
             db.session.query(db.UserModel)
             .filter(db.UserModel.chat_id.is_not(None))
+            .filter(db.UserModel.user_type_id == user_type_id)
             .all()
         )
 
@@ -119,7 +136,7 @@ class Practice:
             .all()
         )
 
-    async def send_alls_notification(self, client, new_practice_id, data):
+    async def send_alls_notification(self, client, new_practice_id, user_type_id, data):
         for admin in ADMINS_LIST_ID:
             await client.send_message(
                 chat_id=admin,
@@ -150,14 +167,43 @@ class Practice:
                     ]
                 ),
             )
-        for user in self.users:
+        for user in self.users(user_type_id):
             await client.send_message(
                 chat_id=user.chat_id,
                 text=data,
                 reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("مشاهده", callback_data="back_home")]]
+                    [[InlineKeyboardButton("مشاهده", callback_data=f"user_active_practice_select_{new_practice_id}")]]
                 ),
             )
+
+    @staticmethod
+    def update_user_type(pk, user_type_id):
+        if not isinstance(user_type_id, int):
+            user_type_id = int(user_type_id)
+        practice = db.session.query(db.PracticeModel).get(pk)
+        if practice:
+            practice.user_type_id = user_type_id
+            db.session.commit()
+            return True
+        return False
+
+    async def set_type(self, client, callback_query):
+        match = re.search(r"admin_practice_set_type_(\d+)_(\d+)", callback_query.data)
+        if match:
+            user_type_id = match.group(1)
+            practice_id = match.group(2)
+            # print(practice_id, user_type, db.UserType[user_type].value)
+            if self.update_user_type(practice_id, user_type_id):
+                await callback_query.message.delete()
+                await callback_query.message.reply_text("تمرین با موفقیت اضافه شد.")
+                await send_home_message_admin(callback_query.message)
+                asyncio.create_task(
+                    self.send_alls_notification(
+                        client, practice_id, user_type_id, "تمرین جدید بارگذاری شد!"
+                    )
+                )
+            else:
+                await callback_query.message.reply_text("error!")
 
 
 class BasePractice:
@@ -221,6 +267,10 @@ class BasePractice:
                 db.PracticeModel.caption,
                 total_count_subquery.label("total_count"),
                 teacher_caption_count_subquery.label("teacher_caption_count"),
+                db.UserTypeModel.name.label("user_type_name"),
+            )
+            .join(
+                db.UserTypeModel, db.UserTypeModel.id == db.PracticeModel.user_type_id
             )
             .filter(db.PracticeModel.id == pk)
             .first()
@@ -237,6 +287,7 @@ class BasePractice:
 
         await callback_query.message.reply_text(
             f"📌 عنوان: {practice.title}\n🔖 متن سوال: {practice.caption}\n"
+            f"تایپ یوزرهای سوال: {practice.user_type_name}\n"
             f"تعداد یوزرهایی که پاسخ داده‌اند: {practice.total_count}\n"
             f"تعداد پاسخ‌هایی که تحلیل سخنرانی شده‌اند: {practice.teacher_caption_count}",
             reply_markup=InlineKeyboardMarkup(
@@ -271,12 +322,14 @@ class BasePractice:
                 db.UserPracticeModel.id.label("id"),
                 db.UserModel.name.label("title"),
                 db.UserPracticeModel.teacher_caption,
+                db.UserTypeModel.name.label("user_type_name"),
             )
             .join(
                 db.PracticeModel,
                 db.UserPracticeModel.practice_id == db.PracticeModel.id,
             )
             .join(db.UserModel, db.UserPracticeModel.user_id == db.UserModel.id)
+            .join(db.UserTypeModel, db.UserTypeModel.id == db.UserModel.user_type_id)
             .filter(db.UserPracticeModel.practice_id == pk)
         )
         return query.all()
@@ -294,6 +347,7 @@ class BasePractice:
             await callback_query.message.delete()
             await callback_query.message.reply_text(
                 f"📌 عنوان: {practice.title}\n🔖 متن سوال: {practice.caption}\n"
+                f"تایپ یوزرهای سوال: {practice.user_type_name}\n"
                 f"تعداد یوزرهایی که پاسخ داده‌اند: {practice.total_count}\n"
                 f"تعداد پاسخ‌هایی که تحلیل سخنرانی شده‌اند: {practice.teacher_caption_count}",
                 reply_markup=get_paginated_keyboard(
@@ -328,7 +382,7 @@ class BasePractice:
                 db.PracticeModel.title.label("title"),
                 db.PracticeModel.caption.label("practice_caption"),
                 db.UserPracticeModel.practice_id.label("practice_id"),
-                db.UserModel.user_type,
+                db.UserTypeModel.name.label("user_type_name"),
                 db.UserModel.phone_number,
             )
             .join(
@@ -336,6 +390,7 @@ class BasePractice:
                 db.PracticeModel.id == db.UserPracticeModel.practice_id,
             )
             .join(db.UserModel, db.UserModel.id == db.UserPracticeModel.user_id)
+            .join(db.UserTypeModel, db.UserTypeModel.id == db.UserModel.user_type_id)
             .filter(db.UserPracticeModel.id == pk)
         )
         return query.first()
@@ -386,7 +441,7 @@ class BasePractice:
             caption=f"📌 عنوان سوال: {user_practice.title}\n"
             f"🔖 متن سوال: {user_practice.practice_caption}\n"
             f"👤 کاربر: {user_practice.username}\n"
-            f"نوع کاربر: {user_practice.user_type.value}\n"
+            f"نوع کاربر: {user_practice.user_type_name}\n"
             f"شماره کاربر: {user_practice.phone_number}\n"
             f"کپشن کاربر:\n {user_practice.user_caption}\n"
             f"وضعیت تحلیل سخنرانی: {capt}",
@@ -548,14 +603,15 @@ class ActivePractice(BasePractice):
         return practices
 
     async def list(self, client, message):
-        if not self.practices:
+        practices = self.practices
+        if not practices:
             await message.reply_text("هیچ تمرین فعالی موجود نیست!")
             return
 
         await message.reply_text(
             "تمارین فعال:",
             reply_markup=get_paginated_keyboard(
-                self.practices,
+                practices,
                 0,
                 "admin_active_practice_paginate_list",
                 "admin_active_practice_select",
@@ -564,8 +620,9 @@ class ActivePractice(BasePractice):
 
     async def paginate_list(self, client, callback_query):
         page = int(callback_query.data.split("_")[-1])
+        practices = self.practices
 
-        if not self.practices:
+        if not practices:
             await callback_query.message.reply_text("هیچ تمرین فعالی موجود نیست!")
             return
 
@@ -574,7 +631,7 @@ class ActivePractice(BasePractice):
             await callback_query.message.reply_text(
                 "تمارین فعال:",
                 reply_markup=get_paginated_keyboard(
-                    self.practices,
+                    practices,
                     page,
                     "admin_active_practice_paginate_list",
                     "admin_active_practice_select",
@@ -584,7 +641,7 @@ class ActivePractice(BasePractice):
 
         await callback_query.message.edit_reply_markup(
             reply_markup=get_paginated_keyboard(
-                self.practices,
+                practices,
                 page,
                 "admin_active_practice_paginate_list",
                 "admin_active_practice_select",
@@ -717,7 +774,7 @@ class NONEPractice:
             return
 
         await message.reply_text(
-            "تمامی تمارین:",
+            "تمامی تکالیف:",
             reply_markup=get_paginated_keyboard(
                 self.user_practices,
                 0,
@@ -769,7 +826,7 @@ class NONEPractice:
                 db.PracticeModel.caption.label("practice_caption"),
                 db.UserPracticeModel.practice_id.label("practice_id"),
                 db.UserPracticeModel.teacher_id.label("techer_id"),
-                db.UserModel.user_type,
+                db.UserTypeModel.name.label("user_type_name"),
                 db.UserModel.phone_number,
             )
             .join(
@@ -777,6 +834,7 @@ class NONEPractice:
                 db.PracticeModel.id == db.UserPracticeModel.practice_id,
             )
             .join(db.UserModel, db.UserModel.id == db.UserPracticeModel.user_id)
+            .join(db.UserTypeModel, db.UserModel.user_type_id == db.UserTypeModel.id)
             .filter(db.UserPracticeModel.id == pk)
         )
         return query.first()
@@ -830,7 +888,7 @@ class NONEPractice:
             caption=f"📌 عنوان سوال: {user_practice.title}\n"
             f"🔖 متن سوال: {user_practice.practice_caption}\n"
             f"👤 کاربر: {user_practice.username}\n"
-            f"نوع کاربر: {user_practice.user_type.value}\n"
+            f"نوع کاربر: {user_practice.user_type_name}\n"
             f"شماره کاربر: {user_practice.phone_number}\n"
             f"کپشن کاربر:\n {user_practice.user_caption}\n"
             f"وضعیت تحلیل سخنرانی: {capt}",
@@ -960,7 +1018,7 @@ class Users:
             & filters.create(self.is_add_user)
         )(self.get_new_user_phone)
         self.app.on_callback_query(
-            filters.regex(r"admin_users_set_type_(\w+)_(\d+)")
+            filters.regex(r"admin_users_set_type_(\d+)_(\d+)")
             & filters.user(ADMINS_LIST_ID)
         )(self.set_type)
 
@@ -1009,7 +1067,7 @@ class Users:
 
         await callback_query.message.reply_text(
             f"id #{user.id}\nPhone: {user.phone_number}\nTelegram ID: {user.tell_id or 'Not set!'}"
-            f"\nName: {user.name or 'Not set!'}\nUser type: {user.user_type.value or 'Not set!'}",
+            f"\nName: {user.name or 'Not set!'}\nUser type: {user.user_type.name or 'Not set!'}",
             reply_markup=InlineKeyboardMarkup(
                 [
                     [
@@ -1108,10 +1166,10 @@ class Users:
                     [
                         [
                             InlineKeyboardButton(
-                                i.value,
-                                callback_data=f"admin_users_set_type_{i.name}_{user_id}",
+                                i.name,
+                                callback_data=f"admin_users_set_type_{i.id}_{user_id}",
                             )
-                            for i in db.UserType
+                            for i in db.session.query(db.UserTypeModel).all()
                         ],
                         [InlineKeyboardButton("exit!", callback_data="back_home")],
                     ]
@@ -1127,21 +1185,23 @@ class Users:
         )
 
     @staticmethod
-    def update_user_type(pk, user_type):
+    def update_user_type(pk, user_type_id):
+        if not isinstance(user_type_id, int):
+            user_type_id = int(user_type_id)
         user = db.session.query(db.UserModel).get(pk)
         if user:
-            user.user_type = user_type
+            user.user_type_id = user_type_id
             db.session.commit()
             return True
         return False
 
     async def set_type(self, client, callback_query):
-        match = re.search(r"admin_users_set_type_(\w+)_(\d+)", callback_query.data)
+        match = re.search(r"admin_users_set_type_(\d+)_(\d+)", callback_query.data)
         if match:
-            user_type = match.group(1)
+            user_type_id = match.group(1)
             user_id = match.group(2)
             # print(user_id, user_type, db.UserType[user_type].value)
-            if self.update_user_type(user_id, db.UserType[user_type]):
+            if self.update_user_type(user_id, user_type_id):
                 await callback_query.message.delete()
                 await callback_query.message.reply_text("کاربر با موفقیت اضافه شد.")
                 await send_home_message_admin(callback_query.message)

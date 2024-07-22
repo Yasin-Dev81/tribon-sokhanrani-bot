@@ -1,13 +1,13 @@
 from pyrogram.types import ReplyKeyboardMarkup
 from pyrogram import filters
 
-from config import ADMINS_LIST_ID
+from config import ADMINS_LIST_ID, BOT_VERSION
 import db
 
 
 async def send_home_message_admin(message):
     await message.reply_text(
-        "Hi, admin! 👋\nwellcome to <b>tribon sokhanrani</b> 🤖 <i>v4.6</i>",
+        f"Hi, admin! 👋\nwellcome to <b>tribon sokhanrani</b> 🤖 <i>v{BOT_VERSION}</i>",
         reply_markup=ReplyKeyboardMarkup(
             [
                 ["تعریف تمرین جدید"],
@@ -24,7 +24,7 @@ async def send_home_message_admin(message):
 
 async def send_home_message_teacher(message):
     await message.reply_text(
-        "Hi, teacher! 👋\nwellcome to <b>tribon sokhanrani</b> 🤖 <i>v4.6</i>",
+        f"Hi, teacher! 👋\nwellcome to <b>tribon sokhanrani</b> 🤖 <i>v{BOT_VERSION}</i>",
         reply_markup=ReplyKeyboardMarkup(
             [
                 ["تکالیف نیازمند به تحلیل سخنرانی"],
@@ -38,7 +38,7 @@ async def send_home_message_teacher(message):
 
 async def send_home_message_user(message):
     await message.reply_text(
-        "Hi, user! 👋\nwellcome to <b>tribon sokhanrani</b> 🤖 <i>v4.6</i>",
+        f"Hi, user! 👋\nwellcome to <b>tribon sokhanrani</b> 🤖 <i>v{BOT_VERSION}</i>",
         reply_markup=ReplyKeyboardMarkup(
             [["تمرین‌های فعال", "تحویل داده شده‌ها"], ["my settings"]],
             resize_keyboard=True,

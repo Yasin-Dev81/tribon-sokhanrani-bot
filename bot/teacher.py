@@ -93,7 +93,9 @@ class BasePractice:
                 db.PracticeModel.caption,
                 total_count_subquery.label("total_count"),
                 teacher_caption_count_subquery.label("teacher_caption_count"),
+                db.UserTypeModel.name.label("user_type_name"),
             )
+            .join(db.UserTypeModel, db.PracticeModel.user_type_id == db.UserTypeModel.id)
             .filter(db.PracticeModel.id == pk)
             .first()
         )
@@ -109,6 +111,7 @@ class BasePractice:
 
         await callback_query.message.reply_text(
             f"📌 عنوان: {practice.title}\n🔖 متن سوال: {practice.caption}\n"
+            f"تایپ یوزرهای سوال: {practice.user_type_name}\n"
             f"تعداد یوزرهایی که پاسخ داده‌اند: {practice.total_count}\n"
             f"تعداد پاسخ‌هایی که تحلیل سخنرانی شده‌اند: {practice.teacher_caption_count}",
             reply_markup=InlineKeyboardMarkup(
@@ -137,11 +140,13 @@ class BasePractice:
                 db.UserPracticeModel.id.label("id"),
                 db.UserModel.name.label("title"),
                 db.UserPracticeModel.teacher_caption,
+                db.UserTypeModel.name.label("user_type_name"),
             )
             .join(
                 db.PracticeModel,
                 db.UserPracticeModel.practice_id == db.PracticeModel.id,
             )
+            .join(db.UserTypeModel, db.UserTypeModel.id == db.PracticeModel.user_type_id)
             .join(db.UserModel, db.UserPracticeModel.user_id == db.UserModel.id)
             .filter(db.UserPracticeModel.practice_id == pk)
         )
@@ -160,6 +165,7 @@ class BasePractice:
             await callback_query.message.delete()
             await callback_query.message.reply_text(
                 f"📌 عنوان: {practice.title}\n🔖 متن سوال: {practice.caption}\n"
+                f"تایپ یوزرهای سوال: {practice.user_type_name}\n"
                 f"تعداد یوزرهایی که پاسخ داده‌اند: {practice.total_count}\n"
                 f"تعداد پاسخ‌هایی که تحلیل سخنرانی شده‌اند: {practice.teacher_caption_count}",
                 reply_markup=get_paginated_keyboard(
@@ -194,13 +200,14 @@ class BasePractice:
                 db.PracticeModel.title.label("title"),
                 db.PracticeModel.caption.label("practice_caption"),
                 db.UserPracticeModel.practice_id.label("practice_id"),
-                db.UserModel.user_type,
                 db.UserModel.phone_number,
+                db.UserTypeModel.name.label("user_type_name")
             )
             .join(
                 db.PracticeModel,
                 db.PracticeModel.id == db.UserPracticeModel.practice_id,
             )
+            .join(db.UserTypeModel, db.PracticeModel.user_type_id == db.UserTypeModel.id)
             .join(db.UserModel, db.UserModel.id == db.UserPracticeModel.user_id)
             .filter(db.UserPracticeModel.id == pk)
         )
@@ -223,7 +230,7 @@ class BasePractice:
             caption=f"📌 عنوان سوال: {user_practice.title}\n"
             f"🔖 متن سوال: {user_practice.practice_caption}\n"
             f"👤 کاربر: {user_practice.username}\n"
-            f"نوع کاربر: {user_practice.user_type.value}\n"
+            f"نوع کاربر: {user_practice.user_type_name}\n"
             f"شماره کاربر: {user_practice.phone_number}\n"
             f"کپشن کاربر:\n {user_practice.user_caption}\n"
             f"وضعیت تحلیل سخنرانی: {capt}",
@@ -627,7 +634,7 @@ class NONEPractice:
                 db.PracticeModel.caption.label("practice_caption"),
                 db.UserPracticeModel.practice_id.label("practice_id"),
                 db.UserPracticeModel.teacher_id.label("techer_id"),
-                db.UserModel.user_type,
+                db.UserTypeModel.name.label("user_type_name"),
                 db.UserModel.phone_number,
             )
             .join(
@@ -635,6 +642,7 @@ class NONEPractice:
                 db.PracticeModel.id == db.UserPracticeModel.practice_id,
             )
             .join(db.UserModel, db.UserModel.id == db.UserPracticeModel.user_id)
+            .join(db.UserTypeModel, db.PracticeModel.user_type_id == db.UserTypeModel.id)
             .filter(db.UserPracticeModel.id == pk)
         )
         return query.first()
@@ -656,7 +664,7 @@ class NONEPractice:
             caption=f"📌 عنوان سوال: {user_practice.title}\n"
             f"🔖 متن سوال: {user_practice.practice_caption}\n"
             f"👤 کاربر: {user_practice.username}\n"
-            f"نوع کاربر: {user_practice.user_type.value}\n"
+            f"نوع کاربر: {user_practice.user_type_name}\n"
             f"شماره کاربر: {user_practice.phone_number}\n"
             f"کپشن کاربر:\n {user_practice.user_caption}\n"
             f"وضعیت تحلیل سخنرانی: {capt}",

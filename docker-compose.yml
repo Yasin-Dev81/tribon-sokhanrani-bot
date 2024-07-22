@@ -1,8 +1,49 @@
 services:
-  ah-score:
-    image: yasindev/ah-score:4.4
+  # tribon-bot:
+  #   container_name: bot
+  #   image: yasindev/ah-score:4.9
+  #   env_file: .env
+  #   network_mode: host
+  #   volumes:
+  #     - "/var/lib/tribon:/var/lib/tribon"
+  #   # networks:
+  #   #   - main
+  #   # depends_on:
+  #   #   - phpmyadmin
+
+  mysql:
+    container_name: mysql_db
+    image: mysql:8.3.0
+    # restart: always
+    command: --disable-log-bin
     env_file: .env
     network_mode: host
+    environment:
+      MYSQL_DATABASE: tribon
+      #MYSQL_USER: root
     volumes:
-      - "/var/lib/tribon_sokhanrani:/var/lib/tribon_sokhanrani"
+      - /var/lib/tribon/mysql:/var/lib/mysql
+    # networks:
+    #   - main
 
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    # restart: always
+    env_file: .env
+    network_mode: host
+    environment:
+      PMA_HOST: 127.0.0.1
+      # PMA_HOST: mysql_db
+      UPLOAD_LIMIT: 1024M
+      # PMA_ABSOLUTE_URI: "https://admin.beytooteketab.online/phpmyadmin/"
+    depends_on:
+      - mysql
+#     ports:
+#       - "8010:80"
+#     networks:
+#       - main
+
+
+# networks:
+#   main:
+#     driver: bridge

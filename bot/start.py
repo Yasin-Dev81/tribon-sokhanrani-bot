@@ -34,6 +34,7 @@ def teacher_update_with_phone_number(phone_number, tell_id, chat_id):
 
 
 async def start(client, message):
+    print(message)
     if message.from_user.id in ADMINS_LIST_ID:
         await send_home_message_admin(message)
         return

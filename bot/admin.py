@@ -172,7 +172,14 @@ class Practice:
                 chat_id=user.chat_id,
                 text=data,
                 reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("مشاهده", callback_data=f"user_active_practice_select_{new_practice_id}")]]
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "مشاهده",
+                                callback_data=f"user_active_practice_select_{new_practice_id}",
+                            )
+                        ]
+                    ]
                 ),
             )
 
@@ -287,9 +294,10 @@ class BasePractice:
 
         await callback_query.message.reply_text(
             f"📌 عنوان: {practice.title}\n🔖 متن سوال: {practice.caption}\n"
-            f"تایپ یوزرهای سوال: {practice.user_type_name}\n"
-            f"تعداد یوزرهایی که پاسخ داده‌اند: {practice.total_count}\n"
-            f"تعداد پاسخ‌هایی که تحلیل سخنرانی شده‌اند: {practice.teacher_caption_count}",
+            f"◾️ تایپ یوزرهای سوال: {practice.user_type_name}\n"
+            "➖➖➖➖➖➖➖➖➖\n"
+            f"◾️ تعداد یوزرهایی که پاسخ داده‌اند: {practice.total_count}\n"
+            f"◾️ تعداد پاسخ‌هایی که تحلیل سخنرانی شده‌اند: {practice.teacher_caption_count}",
             reply_markup=InlineKeyboardMarkup(
                 [
                     [
@@ -347,9 +355,9 @@ class BasePractice:
             await callback_query.message.delete()
             await callback_query.message.reply_text(
                 f"📌 عنوان: {practice.title}\n🔖 متن سوال: {practice.caption}\n"
-                f"تایپ یوزرهای سوال: {practice.user_type_name}\n"
-                f"تعداد یوزرهایی که پاسخ داده‌اند: {practice.total_count}\n"
-                f"تعداد پاسخ‌هایی که تحلیل سخنرانی شده‌اند: {practice.teacher_caption_count}",
+                f"◾️ تایپ یوزرهای سوال: {practice.user_type_name}\n"
+                f"◾️ تعداد یوزرهایی که پاسخ داده‌اند: {practice.total_count}\n"
+                f"◾️ تعداد پاسخ‌هایی که تحلیل سخنرانی شده‌اند: {practice.teacher_caption_count}",
                 reply_markup=get_paginated_keyboard(
                     user_practices,
                     page,
@@ -441,10 +449,10 @@ class BasePractice:
             caption=f"📌 عنوان سوال: {user_practice.title}\n"
             f"🔖 متن سوال: {user_practice.practice_caption}\n"
             f"👤 کاربر: {user_practice.username}\n"
-            f"نوع کاربر: {user_practice.user_type_name}\n"
-            f"شماره کاربر: {user_practice.phone_number}\n"
-            f"کپشن کاربر:\n {user_practice.user_caption}\n"
-            f"وضعیت تحلیل سخنرانی: {capt}",
+            f"◾️ نوع کاربر: {user_practice.user_type_name}\n"
+            f"◾️ شماره کاربر: {user_practice.phone_number}\n"
+            f"◾️ کپشن کاربر:\n {user_practice.user_caption}\n"
+            f"◾️ وضعیت تحلیل سخنرانی: {capt}",
             reply_markup=markup,
         )
 
@@ -1056,9 +1064,64 @@ class Users:
             )
         )
 
+    # @staticmethod
+    # def user(pk):
+    #     return db.session.query(db.UserModel).get(pk)
+
     @staticmethod
     def user(pk):
-        return db.session.query(db.UserModel).get(pk)
+        total_count_subquery = (
+            db.session.query(func.count(db.PracticeModel.id))
+            .join(
+                db.UserModel, db.UserModel.user_type_id == db.PracticeModel.user_type_id
+            )
+            .filter(db.UserModel.id == pk)
+            .scalar_subquery()
+        )
+
+        user_practice_count_subquery = (
+            db.session.query(func.count(db.UserPracticeModel.id))
+            .filter(db.UserPracticeModel.user_id == pk)
+            .scalar_subquery()
+        )
+
+        correction_count_subquery = (
+            db.session.query(func.count(db.UserPracticeModel.id))
+            .filter(
+                db.UserPracticeModel.user_id == pk,
+                db.UserPracticeModel.teacher_caption.is_not(None),
+            )
+            .scalar_subquery()
+        )
+
+        not_correction_count_subquery = (
+            db.session.query(func.count(db.UserPracticeModel.id))
+            .filter(
+                db.UserPracticeModel.user_id == pk,
+                db.UserPracticeModel.teacher_caption.is_(None),
+            )
+            .scalar_subquery()
+        )
+        user_type_subquery = (
+            db.session.query(db.UserTypeModel.name)
+            .filter(db.UserModel.user_type_id == db.UserTypeModel.id)
+            .scalar_subquery()
+        )
+
+        result = (
+            db.session.query(
+                db.UserModel.name,
+                db.UserModel.phone_number,
+                user_type_subquery.label("user_type_name"),
+                total_count_subquery.label("total_count_practice"),
+                user_practice_count_subquery.label("total_count_user_practice"),
+                correction_count_subquery.label("total_count_correction"),
+                not_correction_count_subquery.label("total_count_not_correction"),
+            )
+            .filter(db.UserModel.id == pk)
+            .first()
+        )
+        return result
 
     async def select(self, client, callback_query):
         user_id = int(callback_query.data.split("_")[-1])
@@ -1066,8 +1129,15 @@ class Users:
         await callback_query.message.delete()
 
         await callback_query.message.reply_text(
-            f"id #{user.id}\nPhone: {user.phone_number}\nTelegram ID: {user.tell_id or 'Not set!'}"
-            f"\nName: {user.name or 'Not set!'}\nUser type: {user.user_type.name or 'Not set!'}",
+            f"🆔 #{user_id}\n📞 شماره: \n{user.phone_number}"
+            f"\n👤 نام: {user.name or 'Not set!'}\n"
+            f"◾️ نوع یوزر: {user.user_type_name}\n"
+            "➖➖➖➖➖➖➖➖➖\n"
+            f"◾️ تعداد کل تمارین: {user.total_count_practice}\n"
+            f"◾️ تعداد تکالیف تحویل داده شده: {user.total_count_user_practice}\n"
+            f"◾️ تعداد تکالیف تحویل داده نشده: {user.total_count_practice - user.total_count_user_practice}\n"
+            f"◾️ تعداد تکالیف تصحیح شده: {user.total_count_correction}\n"
+            f"◾️ تعداد تکالیف تصحیح نشده: {user.total_count_not_correction}",
             reply_markup=InlineKeyboardMarkup(
                 [
                     [
@@ -1295,8 +1365,46 @@ class Teachers:
             )
         )
 
-    def user(self, pk):
-        return db.session.query(db.TeacherModel).get(pk)
+    @staticmethod
+    def user(pk):
+        total_count_subquery = (
+            db.session.query(func.count(db.UserPracticeModel.id))
+            .filter(db.UserPracticeModel.teacher_id == pk)
+            .scalar_subquery()
+        )
+
+        teacher_caption_count_subquery = (
+            db.session.query(func.count(db.UserPracticeModel.id))
+            .filter(
+                db.UserPracticeModel.teacher_id == pk,
+                db.UserPracticeModel.teacher_caption.isnot(None),
+            )
+            .scalar_subquery()
+        )
+
+        teacher_caption_none_count_subquery = (
+            db.session.query(func.count(db.UserPracticeModel.id))
+            .filter(
+                db.UserPracticeModel.teacher_id == pk,
+                db.UserPracticeModel.teacher_caption.is_(None),
+            )
+            .scalar_subquery()
+        )
+
+        result = (
+            db.session.query(
+                db.TeacherModel.name,
+                db.TeacherModel.phone_number,
+                total_count_subquery.label("total_count_user_practice"),
+                teacher_caption_count_subquery.label("count_correction_user_practice"),
+                teacher_caption_none_count_subquery.label(
+                    "count_not_correction_user_practice"
+                ),
+            )
+            .filter(db.TeacherModel.id == pk)
+            .first()
+        )
+        return result
 
     async def select(self, client, callback_query):
         user_id = int(callback_query.data.split("_")[-1])
@@ -1304,7 +1412,12 @@ class Teachers:
         await callback_query.message.delete()
 
         await callback_query.message.reply_text(
-            f"id #{user.id}\nTelegram ID: {user.tell_id}\nName: {user.name}",
+            f"🆔 #{user_id}\n👤 نام معلم: {user.name}\n"
+            f"📞 شماره معلم: \n{user.phone_number}\n"
+            "➖➖➖➖➖➖➖➖➖\n"
+            f"◾️ تعداد تمارین تخصیص داده شده: {user.total_count_user_practice}\n"
+            f"◾️ تعداد تمارین تحیل شده: {user.count_correction_user_practice}\n"
+            f"◾️ تعداد تمارین تحلیل نشده: {user.count_not_correction_user_practice}",
             reply_markup=InlineKeyboardMarkup(
                 [
                     [

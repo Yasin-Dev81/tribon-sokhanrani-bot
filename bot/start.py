@@ -10,12 +10,12 @@ from config import ADMINS_LIST_ID
 import db
 
 
-def user_update_with_phone_number(phone_number, tell_id, chat_id, name):
+def user_update_with_phone_number(phone_number, tell_id, chat_id):
     user = db.session.query(db.UserModel).filter_by(phone_number=phone_number).first()
     if user:
         user.tell_id = tell_id
         user.chat_id = chat_id
-        user.name = name
+        # user.name = name
         db.session.commit()
         return True
     else:
@@ -34,7 +34,7 @@ def teacher_update_with_phone_number(phone_number, tell_id, chat_id):
 
 
 async def start(client, message):
-    print(message)
+    # print(message)
     if message.from_user.id in ADMINS_LIST_ID:
         await send_home_message_admin(message)
         return
@@ -73,18 +73,17 @@ async def contact(client, message):
     if "+" not in user_phone_number:
         user_phone_number = "+%s" % user_phone_number
 
-    name = []
-    if message.from_user.first_name:
-        name.append(message.from_user.first_name)
-    if message.from_user.last_name:
-        name.append(message.from_user.last_name)
+    # name = []
+    # if message.from_user.first_name:
+    #     name.append(message.from_user.first_name)
+    # if message.from_user.last_name:
+    #     name.append(message.from_user.last_name)
 
     # db
     user_status = user_update_with_phone_number(
         phone_number=user_phone_number,
         tell_id=message.from_user.id,
-        chat_id=message.chat.id,
-        name=" ".join(name),
+        chat_id=message.chat.id
     )
     print("----- login user", user_phone_number, user_status)
 

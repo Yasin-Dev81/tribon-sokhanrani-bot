@@ -1,9 +1,4 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
-from .models import Base
-from config import SQLALCHEMY_DATABASE_URL
-
+from .base import Base, session, engine
 from .models import (
     User as UserModel,
     Teacher as TeacherModel,
@@ -13,29 +8,10 @@ from .models import (
 )
 
 
-IS_SQLITE = SQLALCHEMY_DATABASE_URL.startswith("sqlite")
-IS_MYSQL = SQLALCHEMY_DATABASE_URL.startswith("mysql")
-
-
-if IS_SQLITE:
-    engine = create_engine(
-        SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
-    )
-elif IS_MYSQL:
-    print("hiiiiiiiiiiiiiii")
-    engine = create_engine(
-        SQLALCHEMY_DATABASE_URL,
-        pool_size=10,
-        max_overflow=30,
-        pool_recycle=3600,
-        pool_timeout=10,
-    )
-else:
-    raise ValueError("Unsupported database URL")
-
+# Create all tables in the database
 Base.metadata.create_all(engine)
-Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-session = Session()
+
+
 
 __all__ = (
     "session",
@@ -44,5 +20,4 @@ __all__ = (
     "PracticeModel",
     "UserPracticeModel",
     "UserTypeModel",
-    "Base"
 )

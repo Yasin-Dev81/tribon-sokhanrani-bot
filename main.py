@@ -11,12 +11,13 @@ from config import TELL_CONFIG, BOT_TOKEN, API_ID, API_HASH
 
 
 # BOT_TOKEN = "7430370444:AAGGcAV62gPswcerfIfvFU2p2NwSIS4crRM"
+# BOT_TOKEN = "7005827895:AAEd4wtyF-oOftIoNG0PSV0dK4yGZR7fhek" # ah-score
 # API_ID = 22868863
 # API_HASH = "6388e9db9f2febffe4ebf0955ccb8345"
 if API_ID and API_HASH and BOT_TOKEN:
     app = Client(
         TELL_CONFIG,
-        # "./var/ah-score"
+        # "./var/ah-score",
         # "./var/tribon",
         api_id=API_ID,
         api_hash=API_HASH,

@@ -7,7 +7,7 @@ from pyrogram.types import (
 )
 import asyncio
 import datetime
-
+import re
 
 from .pagination import get_paginated_keyboard
 from .home import send_home_message_teacher
@@ -16,10 +16,13 @@ import db
 
 
 def is_teacher(filter, client, update):
-    return (
-        db.session.query(db.TeacherModel).filter_by(tell_id=update.from_user.id).first()
-        is not None
-    )
+    with db.session as db_session:
+        return (
+            db_session.query(db.TeacherModel)
+            .filter_by(tell_id=update.from_user.id)
+            .first()
+            is not None
+        )
 
 
 class BasePractice:
@@ -59,6 +62,26 @@ class BasePractice:
             & filters.create(is_teacher)
             & filters.create(self.is_voice_correction_msg)
         )(self.correction_voice)
+        self.app.on_message(
+            filters.reply
+            & filters.video
+            & filters.create(is_teacher)
+            & filters.create(self.is_video_correction_msg)
+        )(self.correction_video)
+        self.app.on_callback_query(
+            filters.regex(
+                rf"teacher_{self.type}_practice_user_practice_confirm_(\d+)_(\d+)"
+            )
+            & filters.create(is_teacher)
+        )(self.confirm)
+        self.app.on_callback_query(
+            filters.regex(rf"teacher_{self.type}_practice_user_practice_next_(\d+)")
+            & filters.create(is_teacher)
+        )(self.next_step)
+        self.app.on_callback_query(
+            filters.regex(rf"teacher_{self.type}_practice_user_practice_done_(\d+)")
+            & filters.create(is_teacher)
+        )(self.done_step)
 
     def is_new_correction_msg(filter, client, update):
         return (
@@ -69,6 +92,12 @@ class BasePractice:
     def is_voice_correction_msg(filter, client, update):
         return (
             "Just send voice correction as a reply to this message"
+            in update.reply_to_message.text
+        )
+
+    def is_video_correction_msg(filter, client, update):
+        return (
+            "Just send video correction as a reply to this message"
             in update.reply_to_message.text
         )
 
@@ -95,7 +124,9 @@ class BasePractice:
                 teacher_caption_count_subquery.label("teacher_caption_count"),
                 db.UserTypeModel.name.label("user_type_name"),
             )
-            .join(db.UserTypeModel, db.PracticeModel.user_type_id == db.UserTypeModel.id)
+            .join(
+                db.UserTypeModel, db.PracticeModel.user_type_id == db.UserTypeModel.id
+            )
             .filter(db.PracticeModel.id == pk)
             .first()
         )
@@ -146,7 +177,9 @@ class BasePractice:
                 db.PracticeModel,
                 db.UserPracticeModel.practice_id == db.PracticeModel.id,
             )
-            .join(db.UserTypeModel, db.UserTypeModel.id == db.PracticeModel.user_type_id)
+            .join(
+                db.UserTypeModel, db.UserTypeModel.id == db.PracticeModel.user_type_id
+            )
             .join(db.UserModel, db.UserPracticeModel.user_id == db.UserModel.id)
             .filter(db.UserPracticeModel.practice_id == pk)
         )
@@ -201,13 +234,15 @@ class BasePractice:
                 db.PracticeModel.caption.label("practice_caption"),
                 db.UserPracticeModel.practice_id.label("practice_id"),
                 db.UserModel.phone_number,
-                db.UserTypeModel.name.label("user_type_name")
+                db.UserTypeModel.name.label("user_type_name"),
             )
             .join(
                 db.PracticeModel,
                 db.PracticeModel.id == db.UserPracticeModel.practice_id,
             )
-            .join(db.UserTypeModel, db.PracticeModel.user_type_id == db.UserTypeModel.id)
+            .join(
+                db.UserTypeModel, db.PracticeModel.user_type_id == db.UserTypeModel.id
+            )
             .join(db.UserModel, db.UserModel.id == db.UserPracticeModel.user_id)
             .filter(db.UserPracticeModel.id == pk)
         )
@@ -261,7 +296,7 @@ class BasePractice:
         await callback_query.message.delete()
 
         await callback_query.message.reply_text(
-            "پیام خود را ریپلی کنید.",
+            "پیام خود را ریپلی کنید." "\n<b>- اجباری -</b>",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("exit!", callback_data="back_home")]]
             ),
@@ -310,9 +345,21 @@ class BasePractice:
         if self.set_teacher_caption_db(user_practice_id, message.text):
             await message.reply_text("با موفقیت ثبت شد.")
             await message.reply_text(
-                "با موفقیت ثبت شد." "در صورت نیاز ویس تحلیل سخنرانی را نیز ریپلی کنید.",
+                "در صورت نیاز ویس تحلیل سخنرانی را نیز ریپلی کنید."
+                "\n<b>- اختیاری -</b>",
                 reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("exit!", callback_data="back_home")]]
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "مرحله بعد (آپلود ویدیو)",
+                                callback_data=f"teacher_{self.type}_practice_user_practice_next_{user_practice_id}",
+                            ),
+                            InlineKeyboardButton(
+                                "اتمام تحلیل",
+                                callback_data=f"teacher_{self.type}_practice_user_practice_done_{user_practice_id}",
+                            ),
+                        ]
+                    ]
                 ),
             )
             await message.reply_text(
@@ -320,15 +367,10 @@ class BasePractice:
                 f"<b>Just send voice correction as a reply to this message</b>",
                 reply_markup=ForceReply(selective=True),
             )
-
-            asyncio.create_task(
-                self.send_user_correction_notification(client, user_practice_id)
-            )
         else:
             await message.reply_text("error!")
 
         await message.reply_to_message.delete()
-        # await send_home_message_teacher(message)
 
     @staticmethod
     def set_teacher_voice_db(pk, file_link):
@@ -339,8 +381,17 @@ class BasePractice:
             return True
         return False
 
+    @staticmethod
+    def set_teacher_video_db(pk, file_link):
+        user_practice = db.session.query(db.UserPracticeModel).get(pk)
+        if user_practice:
+            user_practice.teacher_video_link = file_link
+            db.session.commit()
+            return True
+        return False
+
     async def correction_voice(self, client, message):
-        practice_id = int(message.reply_to_message.text.split("\n")[0])
+        user_practice_id = int(message.reply_to_message.text.split("\n")[0])
 
         media_id = message.voice.file_id
 
@@ -352,11 +403,155 @@ class BasePractice:
 
         # Forward the video to the channel
         await client.send_voice(chat_id=GROUP_CHAT_ID, voice=media_id, caption=capt)
-        self.set_teacher_voice_db(practice_id, media_id)
+        self.set_teacher_voice_db(user_practice_id, media_id)
 
         await message.reply_to_message.delete()
         await message.reply_text("ویس با موفقیت ثبت شد.")
-        await send_home_message_teacher(message)
+
+        await message.reply_text(
+            "در صورت نیاز ویدیو تحلیل سخنرانی را نیز ریپلی کنید."
+            "\n<b>- اختیاری -</b>",
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "اتمام تحلیل",
+                            callback_data=f"teacher_{self.type}_practice_user_practice_done_{user_practice_id}",
+                        )
+                    ]
+                ]
+            ),
+        )
+        await message.reply_text(
+            f"{user_practice_id}\n"
+            f"<b>Just send video correction as a reply to this message</b>",
+            reply_markup=ForceReply(selective=True),
+        )
+
+    async def next_step(self, client, callback_query):
+        user_practice_id = int(callback_query.data.split("_")[-1])
+        await callback_query.message.delete()
+        await callback_query.message.reply_text(
+            "در صورت نیاز ویدیو تحلیل سخنرانی را نیز ریپلی کنید."
+            "\n<b>- اختیاری -</b>",
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "اتمام تحلیل",
+                            callback_data=f"teacher_{self.type}_practice_user_practice_done_{user_practice_id}",
+                        )
+                    ]
+                ]
+            ),
+        )
+        await callback_query.message.reply_text(
+            f"{user_practice_id}\n"
+            f"<b>Just send video correction as a reply to this message</b>",
+            reply_markup=ForceReply(selective=True),
+        )
+
+    async def done_step(self, client, callback_query):
+        user_practice_id = int(callback_query.data.split("_")[-1])
+        await callback_query.message.delete()
+        await callback_query.message.reply_text(
+            "آیا از ثبت این تحلیل سخنرانی اطمینان دارید؟",
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "بلی",
+                            callback_data=f"teacher_{self.type}_practice_user_practice_confirm_{user_practice_id}_1",
+                        ),
+                        InlineKeyboardButton(
+                            "خیر",
+                            callback_data=f"teacher_{self.type}_practice_user_practice_confirm_{user_practice_id}_0",
+                        ),
+                    ]
+                ]
+            ),
+        )
+
+    async def correction_video(self, client, message):
+        user_practice_id = int(message.reply_to_message.text.split("\n")[0])
+
+        media_id = message.video.file_id
+        media_status = (message.video.file_size / 1024) <= 50_000
+
+        if not media_status:
+            message.reply_text("ویدیوی ارسالی باید کمتر از 50 مگابایت باشد!")
+            return
+
+        capt = (
+            f"#correction"
+            f"message id: <i>{message.id}</i>\n---\n"
+            f"from user @{message.from_user.username}\n"
+        )
+
+        # Forward the video to the channel
+        await client.send_video(chat_id=GROUP_CHAT_ID, video=media_id, caption=capt)
+        self.set_teacher_video_db(user_practice_id, media_id)
+
+        await message.reply_to_message.delete()
+        await message.reply_text("ویدئو با موفقیت ثبت شد.")
+        # await send_home_message_teacher(message)
+
+        await message.reply_text(
+            "آیا از ثبت این تحلیل سخنرانی اطمینان دارید؟",
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "بلی",
+                            callback_data=f"teacher_{self.type}_practice_user_practice_confirm_{user_practice_id}_1",
+                        ),
+                        InlineKeyboardButton(
+                            "خیر",
+                            callback_data=f"teacher_{self.type}_practice_user_practice_confirm_{user_practice_id}_0",
+                        ),
+                    ]
+                ]
+            ),
+        )
+
+    @staticmethod
+    def clear_correction_db(pk):
+        with db.session as db_session:
+            user_practice = db_session.query(db.UserPracticeModel).get(pk)
+            if user_practice:
+                user_practice.teacher_caption = None
+                user_practice.teacher_voice_link = None
+                user_practice.teacher_video_link = None
+                db_session.commit()
+                return True
+            return False
+
+    async def confirm(self, client, callback_query):
+        match = re.search(
+            rf"teacher_{self.type}_practice_user_practice_confirm_(\d+)_(\d+)",
+            callback_query.data,
+        )
+        if match:
+            user_practice_id = match.group(1)
+            status = int(match.group(2))
+
+            if status == 0:
+                if self.clear_correction_db(user_practice_id):
+                    await callback_query.message.delete()
+                    await callback_query.message.reply_text("تحلیل پاک شد.")
+                    await send_home_message_teacher(callback_query.message)
+                    return
+            else:
+                await callback_query.message.delete()
+                await callback_query.message.reply_text("تحلیل با موفقیت ثبت شد.")
+                await send_home_message_teacher(callback_query.message)
+                asyncio.create_task(
+                    self.send_user_correction_notification(client, user_practice_id)
+                )
+                return
+
+        await callback_query.message.delete()
+        await callback_query.message.reply_text("error!")
 
 
 class ActivePractice(BasePractice):
@@ -531,18 +726,40 @@ class NONEPractice:
             & filters.create(is_teacher)
             & filters.create(self.is_voice_correction_msg)
         )(self.correction_voice)
+        self.app.on_message(
+            filters.reply
+            & filters.video
+            & filters.create(is_teacher)
+            & filters.create(self.is_video_correction_msg)
+        )(self.correction_video)
+        self.app.on_callback_query(
+            filters.regex(r"teacher_none_practice_user_practice_confirm_(\d+)_(\d+)")
+            & filters.create(is_teacher)
+        )(self.confirm)
+        self.app.on_callback_query(
+            filters.regex(r"teacher_none_practice_user_practice_next_(\d+)")
+            & filters.create(is_teacher)
+        )(self.next_step)
+        self.app.on_callback_query(
+            filters.regex(r"teacher_none_practice_user_practice_done_(\d+)")
+            & filters.create(is_teacher)
+        )(self.done_step)
 
-    @staticmethod
     def is_new_correction_msg(filter, client, update):
         return (
             "Just send n correction as a reply to this message"
             in update.reply_to_message.text
         )
 
-    @staticmethod
     def is_voice_correction_msg(filter, client, update):
         return (
             "Just send n voice correction as a reply to this message"
+            in update.reply_to_message.text
+        )
+
+    def is_video_correction_msg(filter, client, update):
+        return (
+            "Just send n video correction as a reply to this message"
             in update.reply_to_message.text
         )
 
@@ -642,7 +859,9 @@ class NONEPractice:
                 db.PracticeModel.id == db.UserPracticeModel.practice_id,
             )
             .join(db.UserModel, db.UserModel.id == db.UserPracticeModel.user_id)
-            .join(db.UserTypeModel, db.PracticeModel.user_type_id == db.UserTypeModel.id)
+            .join(
+                db.UserTypeModel, db.PracticeModel.user_type_id == db.UserTypeModel.id
+            )
             .filter(db.UserPracticeModel.id == pk)
         )
         return query.first()
@@ -675,13 +894,13 @@ class NONEPractice:
                             "تحلیل سخنرانی مجدد"
                             if user_practice.teacher_caption
                             else "تحلیل سخنرانی",
-                            callback_data=f"teacher_all_practice_user_practice_correction_{user_practice_id}",
+                            callback_data=f"teacher_none_practice_user_practice_correction_{user_practice_id}",
                         )
                     ],
                     [
                         InlineKeyboardButton(
                             "🔙 بازگشت",
-                            callback_data=f"teacher_all_practice_user_practice_list_{user_practice.practice_id}_0",
+                            callback_data=f"teacher_none_practice_user_practice_list_{user_practice.practice_id}_0",
                         ),
                         InlineKeyboardButton("exit!", callback_data="back_home"),
                     ],
@@ -744,9 +963,21 @@ class NONEPractice:
         if self.set_teacher_caption_db(user_practice_id, message.text):
             await message.reply_text("با موفقیت ثبت شد.")
             await message.reply_text(
-                "با موفقیت ثبت شد." "در صورت نیاز ویس تحلیل سخنرانی را نیز ریپلی کنید.",
+                "در صورت نیاز ویس تحلیل سخنرانی را نیز ریپلی کنید."
+                "\n<b>- اختیاری -</b>",
                 reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("exit!", callback_data="back_home")]]
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "مرحله بعد (آپلود ویدیو)",
+                                callback_data=f"teacher_none_practice_user_practice_next_{user_practice_id}",
+                            ),
+                            InlineKeyboardButton(
+                                "اتمام تحلیل",
+                                callback_data=f"teacher_none_practice_user_practice_done_{user_practice_id}",
+                            ),
+                        ]
+                    ]
                 ),
             )
             await message.reply_text(
@@ -755,14 +986,10 @@ class NONEPractice:
                 reply_markup=ForceReply(selective=True),
             )
 
-            asyncio.create_task(
-                self.send_user_correction_notification(client, user_practice_id)
-            )
         else:
             await message.reply_text("error!")
 
         await message.reply_to_message.delete()
-        await send_home_message_teacher(message)
 
     @staticmethod
     def set_teacher_voice_db(pk, file_link):
@@ -773,8 +1000,17 @@ class NONEPractice:
             return True
         return False
 
+    @staticmethod
+    def set_teacher_video_db(pk, file_link):
+        user_practice = db.session.query(db.UserPracticeModel).get(pk)
+        if user_practice:
+            user_practice.teacher_video_link = file_link
+            db.session.commit()
+            return True
+        return False
+
     async def correction_voice(self, client, message):
-        practice_id = int(message.reply_to_message.text.split("\n")[0])
+        user_practice_id = int(message.reply_to_message.text.split("\n")[0])
 
         media_id = message.voice.file_id
 
@@ -786,11 +1022,155 @@ class NONEPractice:
 
         # Forward the video to the channel
         await client.send_voice(chat_id=GROUP_CHAT_ID, voice=media_id, caption=capt)
-        self.set_teacher_voice_db(practice_id, media_id)
+        self.set_teacher_voice_db(user_practice_id, media_id)
 
         await message.reply_to_message.delete()
         await message.reply_text("ویس با موفقیت ثبت شد.")
-        await send_home_message_teacher(message)
+
+        await message.reply_text(
+            "در صورت نیاز ویدیو تحلیل سخنرانی را نیز ریپلی کنید."
+            "\n<b>- اختیاری -</b>",
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "اتمام تحلیل",
+                            callback_data=f"teacher_none_practice_user_practice_done_{user_practice_id}",
+                        )
+                    ]
+                ]
+            ),
+        )
+        await message.reply_text(
+            f"{user_practice_id}\n"
+            f"<b>Just send n video correction as a reply to this message</b>",
+            reply_markup=ForceReply(selective=True),
+        )
+
+    async def next_step(self, client, callback_query):
+        user_practice_id = int(callback_query.data.split("_")[-1])
+        await callback_query.message.delete()
+        await callback_query.message.reply_text(
+            "در صورت نیاز ویدیو تحلیل سخنرانی را نیز ریپلی کنید."
+            "\n<b>- اختیاری -</b>",
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "اتمام تحلیل",
+                            callback_data=f"teacher_none_practice_user_practice_done_{user_practice_id}",
+                        )
+                    ]
+                ]
+            ),
+        )
+        await callback_query.message.reply_text(
+            f"{user_practice_id}\n"
+            f"<b>Just send n video correction as a reply to this message</b>",
+            reply_markup=ForceReply(selective=True),
+        )
+
+    async def done_step(self, client, callback_query):
+        user_practice_id = int(callback_query.data.split("_")[-1])
+        await callback_query.message.delete()
+        await callback_query.message.reply_text(
+            "آیا از ثبت این تحلیل سخنرانی اطمینان دارید؟",
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "بلی",
+                            callback_data=f"teacher_none_practice_user_practice_confirm_{user_practice_id}_1",
+                        ),
+                        InlineKeyboardButton(
+                            "خیر",
+                            callback_data=f"teacher_none_practice_user_practice_confirm_{user_practice_id}_0",
+                        ),
+                    ]
+                ]
+            ),
+        )
+
+    async def correction_video(self, client, message):
+        user_practice_id = int(message.reply_to_message.text.split("\n")[0])
+
+        media_id = message.video.file_id
+        media_status = (message.video.file_size / 1024) <= 50_000
+
+        if not media_status:
+            message.reply_text("ویدیوی ارسالی باید کمتر از 50 مگابایت باشد!")
+            return
+
+        capt = (
+            f"#correction"
+            f"message id: <i>{message.id}</i>\n---\n"
+            f"from user @{message.from_user.username}\n"
+        )
+
+        # Forward the video to the channel
+        await client.send_video(chat_id=GROUP_CHAT_ID, video=media_id, caption=capt)
+        self.set_teacher_video_db(user_practice_id, media_id)
+
+        await message.reply_to_message.delete()
+        await message.reply_text("ویدئو با موفقیت ثبت شد.")
+        # await send_home_message_teacher(message)
+
+        await message.reply_text(
+            "آیا از ثبت این تحلیل سخنرانی اطمینان دارید؟",
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "بلی",
+                            callback_data=f"teacher_none_practice_user_practice_confirm_{user_practice_id}_1",
+                        ),
+                        InlineKeyboardButton(
+                            "خیر",
+                            callback_data=f"teacher_none_practice_user_practice_confirm_{user_practice_id}_0",
+                        ),
+                    ]
+                ]
+            ),
+        )
+
+    @staticmethod
+    def clear_correction_db(pk):
+        with db.session as db_session:
+            user_practice = db_session.query(db.UserPracticeModel).get(pk)
+            if user_practice:
+                user_practice.teacher_caption = None
+                user_practice.teacher_voice_link = None
+                user_practice.teacher_video_link = None
+                db_session.commit()
+                return True
+            return False
+
+    async def confirm(self, client, callback_query):
+        match = re.search(
+            r"teacher_none_practice_user_practice_confirm_(\d+)_(\d+)",
+            callback_query.data,
+        )
+        if match:
+            user_practice_id = match.group(1)
+            status = int(match.group(2))
+
+            if status == 0:
+                if self.clear_correction_db(user_practice_id):
+                    await callback_query.message.delete()
+                    await callback_query.message.reply_text("تحلیل پاک شد.")
+                    await send_home_message_teacher(callback_query.message)
+                    return
+            else:
+                await callback_query.message.delete()
+                await callback_query.message.reply_text("تحلیل با موفقیت ثبت شد.")
+                await send_home_message_teacher(callback_query.message)
+                asyncio.create_task(
+                    self.send_user_correction_notification(client, user_practice_id)
+                )
+                return
+
+        await callback_query.message.delete()
+        await callback_query.message.reply_text("error!")
 
 
 async def teacher_my_settings(client, message):

@@ -48,7 +48,7 @@ def users_paginated_keyboard(
     keyboard = [
         [
             InlineKeyboardButton(
-                f"{i.name} - {i.phone_number} - {'✅' if bool(i.chat_id) else '❎'}",
+                f"{i.name} | {i.phone_number} | {'✅' if bool(i.chat_id) else '❎'}",
                 callback_data=f"{keyboard_callback}_{i.id}",
             )
         ]
@@ -88,7 +88,7 @@ def teachers_paginated_keyboard(
     keyboard = [
         [
             InlineKeyboardButton(
-                f"{i.name} - {i.tell_id} - {'✅' if bool(i.chat_id) else '❎'}",
+                f"{i.name} | {i.phone_number} | {'✅' if bool(i.chat_id) else '❎'}",
                 callback_data=f"{keyboard_callback}_{i.id}",
             )
         ]
@@ -128,7 +128,7 @@ def none_teacher_paginated_keyboard(
     keyboard = [
         [
             InlineKeyboardButton(
-                f"{i.id} - {i.name}", callback_data=f"{keyboard_callback}_{i.id}"
+                f"{i.id} | {i.name}", callback_data=f"{keyboard_callback}_{i.id}"
             )
         ]
         for i in paginated_practices
@@ -167,7 +167,7 @@ def none_teacher_paginated_keyboard_t(
     keyboard = [
         [
             InlineKeyboardButton(
-                f"{i.id} - {i.user_id}", callback_data=f"{keyboard_callback}_{i.id}"
+                f"{i.id} | {i.user_id}", callback_data=f"{keyboard_callback}_{i.id}"
             )
         ]
         for i in paginated_practices

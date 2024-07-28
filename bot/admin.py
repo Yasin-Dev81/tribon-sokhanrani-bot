@@ -1214,7 +1214,7 @@ class Users:
 
     @staticmethod
     def not_in_db(phone_num):
-        return db.session.query(db.UserModel).filter_by(phone_number=phone_num).all() is None
+        return db.session.query(db.UserModel).filter_by(phone_number=phone_num).first() is None
 
     @staticmethod
     def add_db(phone_num):
@@ -1502,7 +1502,7 @@ class Teachers:
 
     @staticmethod
     def not_in_db(phone_num):
-        return db.session.query(db.TeacherModel).filter_by(phone_number=phone_num).all() is None
+        return db.session.query(db.TeacherModel).filter_by(phone_number=phone_num).first() is None
 
     @staticmethod
     def add_db(phone_num):

@@ -23,7 +23,7 @@ def user_update_with_phone_number(phone_number, tell_id, chat_id):
 
 
 def teacher_update_with_phone_number(phone_number, tell_id, chat_id):
-    user = db.session.query(db.UserModel).filter_by(phone_number=phone_number).first()
+    user = db.session.query(db.TeacherModel).filter_by(phone_number=phone_number).first()
     if user:
         user.tell_id = tell_id
         user.chat_id = chat_id

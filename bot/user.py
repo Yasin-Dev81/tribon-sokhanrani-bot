@@ -298,7 +298,7 @@ class ActivePractice:
         media_status = (message.video.file_size / 1024) <= 50_000
 
         if not media_status:
-            message.reply_text("ویدیوی ارسالی باید کمتر از 50 مگابایت باشد!")
+            await message.reply_text("ویدیوی ارسالی باید کمتر از 50 مگابایت باشد!")
             return
 
         capt = (
@@ -663,7 +663,7 @@ class AnsweredPractice:
         media_status = (message.video.file_size / 1024) <= 50_000
 
         if not media_status:
-            client.reply_text("ویدیوی ارسالی باید کمتر از 50 مگابایت باشد!")
+            await message.reply_text("ویدیوی ارسالی باید کمتر از 50 مگابایت باشد!")
             return
 
         capt = (
@@ -733,7 +733,7 @@ class AnsweredPractice:
         media_status = (message.video.file_size / 1024) <= 50_000
 
         if not media_status:
-            client.reply_text("ویدیوی ارسالی باید کمتر از 50 مگابایت باشد!")
+            await message.reply_text("ویدیوی ارسالی باید کمتر از 50 مگابایت باشد!")
             return
 
         capt = (

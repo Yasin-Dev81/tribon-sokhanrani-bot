@@ -8,11 +8,6 @@ from .models import (
 )
 
 
-# Create all tables in the database
-Base.metadata.create_all(engine)
-
-
-
 __all__ = (
     "session",
     "UserModel",

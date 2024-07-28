@@ -1,19 +1,15 @@
-FROM python:3.9-slim
+FROM python:3.10-slim
 
-# Set the working directory
-WORKDIR /app
+ENV BOT_VERSION="5.2"
 
-# Copy the current directory contents into the container at /app
-COPY . .
+WORKDIR /code
 
-# Install dependencies
-RUN pip install --upgrade pip && pip install -r requirements.txt
+COPY ./requirements.txt /code/
+RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
 
-ENV BOT_VERSION="4.12"
+COPY . /code
 
-# Run database migrations
-# RUN ["python", "migrate.py", "upgrade"]
-# # Define the command to run your application
+# RUN alembic upgrade head
 CMD ["python", "main.py"]
-# CMD ["bash", "-c", "alembic upgrade head; python main.py"]
-# CMD ["bash", "-c", "alembic upgrade head && alembic --version && python main.py "]
+# CMD ["bash", "-c", "alembic upgrade head && python main.py"]
+# CMD ["bash", "-c", "alembic upgrade head;", "python main.py"]

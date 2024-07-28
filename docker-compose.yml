@@ -1,17 +1,17 @@
 services:
-  mysql_db:
+  db:
     container_name: mysql_db
-    image: mysql:8.3.0
+    image: mysql:9
     # restart: always
     command: --disable-log-bin
-    env_file: .env
+    # env_file: .env
     network_mode: host
     environment:
       MYSQL_DATABASE: tribon
       # MYSQL_USER: root
       MYSQL_ROOT_PASSWORD: "jojo9900"
     volumes:
-      - ./var/tmp/mysql:/var/lib/mysql
+      - ./var/tmp11/mysql:/var/lib/mysql
     # networks:
     #   - main
     healthcheck:
@@ -32,7 +32,7 @@ services:
 
   # tribon-bot:
   #   container_name: bot
-  #   image: yasindev/ah-score:4.12
+  #   image: yasindev/ah-score:5.3
   #   env_file: .env
   #   network_mode: host
   #   volumes:
@@ -40,12 +40,12 @@ services:
   #   # networks:
   #   #   - main
   #   depends_on:
-  #     - mysql_db
+  #     - db
 
   phpmyadmin:
     image: phpmyadmin/phpmyadmin:latest
     # restart: always
-    env_file: .env
+    # env_file: .env
     network_mode: host
     environment:
       PMA_HOST: 127.0.0.1
@@ -53,7 +53,8 @@ services:
       UPLOAD_LIMIT: 1024M
       # PMA_ABSOLUTE_URI: "https://admin.beytooteketab.online/phpmyadmin/"
     depends_on:
-      - mysql_db
+      - db
+
 #     ports:
 #       - "80:80"
 #     networks:

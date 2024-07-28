@@ -22,10 +22,8 @@ API_HASH = config("API_HASH", default=None)
 SQLALCHEMY_DATABASE_URL = config(
     "SQLALCHEMY_DATABASE_URL", default="mysql+pymysql://root:jojo9900@127.0.0.1:3306/tribon"
 )
-# SQLALCHEMY_DATABASE_URL = "mysql+pymysql://root:jojo9900@127.0.0.1:3306/tribon"
 
 # users
-# ADMINS_LIST_ID = [713775832, 1024669168]
 ADMINS_LIST_ID = config(
     "ADMINS_LIST_ID",
     default="",
@@ -34,8 +32,7 @@ ADMINS_LIST_ID = config(
     ],
 )
 
-CHANEL_CHAT_ID = config("CHANEL_CHAT_ID", default="-1002218177926")
-GROUP_CHAT_ID = config("GROUP_CHAT_ID", default="-1002218303002")
+GROUP_CHAT_ID = config("GROUP_CHAT_ID", default=None)
 
 # pagination
 PRACTICES_PER_PAGE = config("PRACTICES_PER_PAGE", cast=int, default=5)

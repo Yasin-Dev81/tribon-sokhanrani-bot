@@ -1213,6 +1213,10 @@ class Users:
         )
 
     @staticmethod
+    def not_in_db(phone_num):
+        return db.session.query(db.UserModel).filter_by(phone_number=phone_num).all() is None
+
+    @staticmethod
     def add_db(phone_num):
         new_user = db.UserModel(phone_number=phone_num)
         db.session.add(new_user)
@@ -1222,33 +1226,36 @@ class Users:
     async def get_new_user_phone(self, client, message):
         phone_num = message.text
         # +989154797706
+        stat = ""
 
         if "+" in phone_num and len(phone_num) == 13:
-            user_id = self.add_db(phone_num)
-            # await message.reply_text(f"کاربر {message.text} با موفقیت اضافه شد.")
+            if self.not_in_db(phone_num):
+                user_id = self.add_db(phone_num)
+                # await message.reply_text(f"کاربر {message.text} با موفقیت اضافه شد.")
 
-            await message.reply_to_message.delete()
+                await message.reply_to_message.delete()
 
-            # await send_home_message_admin(message)
-            await message.reply_text(
-                "لطفا نوع یوزر را انتخاب کنید:",
-                reply_markup=InlineKeyboardMarkup(
-                    [
+                # await send_home_message_admin(message)
+                await message.reply_text(
+                    "لطفا نوع یوزر را انتخاب کنید:",
+                    reply_markup=InlineKeyboardMarkup(
                         [
-                            InlineKeyboardButton(
-                                i.name,
-                                callback_data=f"admin_users_set_type_{i.id}_{user_id}",
-                            )
-                            for i in db.session.query(db.UserTypeModel).all()
-                        ],
-                        [InlineKeyboardButton("exit!", callback_data="back_home")],
-                    ]
-                ),
-            )
-            return
+                            [
+                                InlineKeyboardButton(
+                                    i.name,
+                                    callback_data=f"admin_users_set_type_{i.id}_{user_id}",
+                                )
+                                for i in db.session.query(db.UserTypeModel).all()
+                            ],
+                            [InlineKeyboardButton("exit!", callback_data="back_home")],
+                        ]
+                    ),
+                )
+                return
+            stat = "شماره تلفن تکراری است!"
 
         await message.reply_text(
-            "No!, try again.",
+            f"No!, try again.\n{stat}",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("exit!", callback_data="back_home")]]
             ),
@@ -1494,6 +1501,10 @@ class Teachers:
         )
 
     @staticmethod
+    def not_in_db(phone_num):
+        return db.session.query(db.TeacherModel).filter_by(phone_number=phone_num).all() is None
+
+    @staticmethod
     def add_db(phone_num):
         new_teacher = db.TeacherModel(phone_number=phone_num)
         db.session.add(new_teacher)
@@ -1502,29 +1513,32 @@ class Teachers:
 
     async def get_new_teacher_id(self, client, message):
         phone_num = message.text
+        stat = ""
 
         if "+" in phone_num and len(phone_num) == 13:
-            teacher_id = self.add_db(phone_num)
-            await message.reply_to_message.delete()
+            if self.not_in_db(phone_num):
+                teacher_id = self.add_db(phone_num)
+                await message.reply_to_message.delete()
 
-            await message.reply_text(
-                f"معلم {message.text} با موفقیت اضافه شد."
-                "حال نام معلم را ارسال کنید.",
-                reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("exit!", callback_data="back_home")]]
-                ),
-            )
-            await message.reply_text(
-                f"{teacher_id}\n"
-                "<b>Just send teacher name as a reply to this message</b>",
-                reply_markup=ForceReply(selective=True),
-            )
+                await message.reply_text(
+                    f"معلم {message.text} با موفقیت اضافه شد."
+                    "حال نام معلم را ارسال کنید.",
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("exit!", callback_data="back_home")]]
+                    ),
+                )
+                await message.reply_text(
+                    f"{teacher_id}\n"
+                    "<b>Just send teacher name as a reply to this message</b>",
+                    reply_markup=ForceReply(selective=True),
+                )
 
-            # await send_home_message_admin(message)
-            return
+                # await send_home_message_admin(message)
+                return
+            stat = "شماره تلفن تکراری است!"
 
         await message.reply_text(
-            "No!, try again.",
+            f"No!, try again.\n{stat}",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("exit!", callback_data="back_home")]]
             ),

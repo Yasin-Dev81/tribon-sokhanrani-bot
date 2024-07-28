@@ -142,9 +142,9 @@ class BasePractice:
 
         await callback_query.message.reply_text(
             f"📌 عنوان: {practice.title}\n🔖 متن سوال: {practice.caption}\n"
-            f"تایپ یوزرهای سوال: {practice.user_type_name}\n"
-            f"تعداد یوزرهایی که پاسخ داده‌اند: {practice.total_count}\n"
-            f"تعداد پاسخ‌هایی که تحلیل سخنرانی شده‌اند: {practice.teacher_caption_count}",
+            f"◾️ تایپ یوزرهای سوال: {practice.user_type_name}\n"
+            f"◾️ تعداد یوزرهایی که پاسخ داده‌اند: {practice.total_count}\n"
+            f"◾️ تعداد پاسخ‌هایی که تحلیل سخنرانی شده‌اند: {practice.teacher_caption_count}",
             reply_markup=InlineKeyboardMarkup(
                 [
                     [
@@ -198,9 +198,9 @@ class BasePractice:
             await callback_query.message.delete()
             await callback_query.message.reply_text(
                 f"📌 عنوان: {practice.title}\n🔖 متن سوال: {practice.caption}\n"
-                f"تایپ یوزرهای سوال: {practice.user_type_name}\n"
-                f"تعداد یوزرهایی که پاسخ داده‌اند: {practice.total_count}\n"
-                f"تعداد پاسخ‌هایی که تحلیل سخنرانی شده‌اند: {practice.teacher_caption_count}",
+                f"◾️ تایپ یوزرهای سوال: {practice.user_type_name}\n"
+                f"◾️ تعداد یوزرهایی که پاسخ داده‌اند: {practice.total_count}\n"
+                f"◾️ تعداد پاسخ‌هایی که تحلیل سخنرانی شده‌اند: {practice.teacher_caption_count}",
                 reply_markup=get_paginated_keyboard(
                     user_practices,
                     page,
@@ -233,15 +233,10 @@ class BasePractice:
                 db.PracticeModel.title.label("title"),
                 db.PracticeModel.caption.label("practice_caption"),
                 db.UserPracticeModel.practice_id.label("practice_id"),
-                db.UserModel.phone_number,
-                db.UserTypeModel.name.label("user_type_name"),
             )
             .join(
                 db.PracticeModel,
                 db.PracticeModel.id == db.UserPracticeModel.practice_id,
-            )
-            .join(
-                db.UserTypeModel, db.PracticeModel.user_type_id == db.UserTypeModel.id
             )
             .join(db.UserModel, db.UserModel.id == db.UserPracticeModel.user_id)
             .filter(db.UserPracticeModel.id == pk)
@@ -264,11 +259,9 @@ class BasePractice:
             video=user_practice.file_link,
             caption=f"📌 عنوان سوال: {user_practice.title}\n"
             f"🔖 متن سوال: {user_practice.practice_caption}\n"
-            f"👤 کاربر: {user_practice.username}\n"
-            f"نوع کاربر: {user_practice.user_type_name}\n"
-            f"شماره کاربر: {user_practice.phone_number}\n"
-            f"کپشن کاربر:\n {user_practice.user_caption}\n"
-            f"وضعیت تحلیل سخنرانی: {capt}",
+            f"👤 نام کاربر: {user_practice.username}\n"
+            f"◾️ کپشن کاربر:\n {user_practice.user_caption}\n"
+            f"◾️ وضعیت تحلیل سخنرانی: {capt}",
             reply_markup=InlineKeyboardMarkup(
                 [
                     [
@@ -851,17 +844,12 @@ class NONEPractice:
                 db.PracticeModel.caption.label("practice_caption"),
                 db.UserPracticeModel.practice_id.label("practice_id"),
                 db.UserPracticeModel.teacher_id.label("techer_id"),
-                db.UserTypeModel.name.label("user_type_name"),
-                db.UserModel.phone_number,
             )
             .join(
                 db.PracticeModel,
                 db.PracticeModel.id == db.UserPracticeModel.practice_id,
             )
             .join(db.UserModel, db.UserModel.id == db.UserPracticeModel.user_id)
-            .join(
-                db.UserTypeModel, db.PracticeModel.user_type_id == db.UserTypeModel.id
-            )
             .filter(db.UserPracticeModel.id == pk)
         )
         return query.first()
@@ -882,11 +870,9 @@ class NONEPractice:
             video=user_practice.file_link,
             caption=f"📌 عنوان سوال: {user_practice.title}\n"
             f"🔖 متن سوال: {user_practice.practice_caption}\n"
-            f"👤 کاربر: {user_practice.username}\n"
-            f"نوع کاربر: {user_practice.user_type_name}\n"
-            f"شماره کاربر: {user_practice.phone_number}\n"
-            f"کپشن کاربر:\n {user_practice.user_caption}\n"
-            f"وضعیت تحلیل سخنرانی: {capt}",
+            f"👤 نام کاربر: {user_practice.username}\n"
+            f"◾️ کپشن کاربر:\n {user_practice.user_caption}\n"
+            f"◾️ وضعیت تحلیل سخنرانی: {capt}",
             reply_markup=InlineKeyboardMarkup(
                 [
                     [

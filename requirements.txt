@@ -4,5 +4,5 @@ python-decouple==3.6
 SQLAlchemy==2.0.31
 TgCrypto==1.2.5
 PyMySQL==1.1.1
-alembic==1.13.2
+# alembic==1.13.2
 cryptography==43.0.0

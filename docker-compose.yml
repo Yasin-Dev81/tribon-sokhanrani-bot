@@ -1,5 +1,64 @@
 services:
-  ah-score:
-    image: yasindev/ah-score:1.0.0
-    env_file: env-rank
+  mysql_db:
+    container_name: mysql_db
+    image: mysql:8.3.0
+    # restart: always
+    command: --disable-log-bin
+    env_file: .env
     network_mode: host
+    environment:
+      MYSQL_DATABASE: tribon
+      # MYSQL_USER: root
+      MYSQL_ROOT_PASSWORD: "jojo9900"
+    volumes:
+      - ./var/tmp/mysql:/var/lib/mysql
+    # networks:
+    #   - main
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "localhost",
+          "-u",
+          "root",
+          "jojo9900"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # tribon-bot:
+  #   container_name: bot
+  #   image: yasindev/ah-score:4.12
+  #   env_file: .env
+  #   network_mode: host
+  #   volumes:
+  #     - "./var/tribon:/var/lib/tribon"
+  #   # networks:
+  #   #   - main
+  #   depends_on:
+  #     - mysql_db
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    # restart: always
+    env_file: .env
+    network_mode: host
+    environment:
+      PMA_HOST: 127.0.0.1
+      # PMA_HOST: mysql_db
+      UPLOAD_LIMIT: 1024M
+      # PMA_ABSOLUTE_URI: "https://admin.beytooteketab.online/phpmyadmin/"
+    depends_on:
+      - mysql_db
+#     ports:
+#       - "80:80"
+#     networks:
+#       - main
+
+# networks:
+#   main:
+#     driver: bridge

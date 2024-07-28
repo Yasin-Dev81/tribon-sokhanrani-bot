@@ -23,6 +23,9 @@ class User(Base):
 
     user_type = relationship("UserType")
 
+    def __repr__(self):
+        return f"{self.name} | {self.phone_number}"
+
 
 class Teacher(Base):
     __tablename__ = "teacher"
@@ -31,6 +34,9 @@ class Teacher(Base):
     tell_id = Column(BigInteger, nullable=True)
     chat_id = Column(BigInteger, nullable=True)
     name = Column(String(100), nullable=True)
+
+    def __repr__(self):
+        return f"{self.name} | {self.phone_number}"
 
 
 class Practice(Base):
@@ -43,6 +49,9 @@ class Practice(Base):
     user_type_id = Column(Integer, ForeignKey("user_type.id"))
 
     user_type = relationship("UserType")
+
+    def __repr__(self):
+        return self.title
 
 
 class UserPractice(Base):

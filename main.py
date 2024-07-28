@@ -13,6 +13,7 @@ from config import TELL_CONFIG, BOT_TOKEN, API_ID, API_HASH
 if API_ID and API_HASH and BOT_TOKEN:
     app = Client(
         TELL_CONFIG,
+        # "./var/ah-score",
         api_id=API_ID,
         api_hash=API_HASH,
         bot_token=BOT_TOKEN,

@@ -9,7 +9,7 @@ import asyncio
 import datetime
 import re
 
-from .pagination import get_paginated_keyboard
+from .pagination import get_paginated_keyboard, user_practice_paginated_keyboard
 from .home import send_home_message_teacher
 from config import GROUP_CHAT_ID
 import db
@@ -37,13 +37,19 @@ class BasePractice:
             & filters.create(is_teacher)
         )(self.select)
         self.app.on_callback_query(
-            filters.regex(rf"teacher_{self.type}_practice_user_practice_list_(\d+)")
+            filters.regex(rf"teacher_{self.type}_practice_user_practice_list_(\d+)_(\d+)")
             & filters.create(is_teacher)
         )(self.user_practice_list)
         self.app.on_callback_query(
             filters.regex(rf"teacher_{self.type}_practice_user_practice_select_(\d+)")
             & filters.create(is_teacher)
         )(self.user_practice_select)
+        self.app.on_callback_query(
+            filters.regex(
+                rf"teacher_{self.type}_practice_user_practice_correction_type_(\d+)_(\d+)"
+            )
+            & filters.create(is_teacher)
+        )(self.correction_type)
         self.app.on_callback_query(
             filters.regex(
                 rf"teacher_{self.type}_practice_user_practice_correction_(\d+)"
@@ -55,7 +61,7 @@ class BasePractice:
             & filters.text
             & filters.create(is_teacher)
             & filters.create(self.is_new_correction_msg)
-        )(self.set_teacher_caption)
+        )(self.correction_text)
         self.app.on_message(
             filters.reply
             & filters.voice
@@ -74,14 +80,6 @@ class BasePractice:
             )
             & filters.create(is_teacher)
         )(self.confirm)
-        self.app.on_callback_query(
-            filters.regex(rf"teacher_{self.type}_practice_user_practice_next_(\d+)")
-            & filters.create(is_teacher)
-        )(self.next_step)
-        self.app.on_callback_query(
-            filters.regex(rf"teacher_{self.type}_practice_user_practice_done_(\d+)")
-            & filters.create(is_teacher)
-        )(self.done_step)
 
     def is_new_correction_msg(filter, client, update):
         return (
@@ -165,7 +163,7 @@ class BasePractice:
         )
 
     @staticmethod
-    def user_practices(pk):
+    def user_practices(pk, teacher_tell_id):
         query = (
             db.session.query(
                 db.UserPracticeModel.id.label("id"),
@@ -181,13 +179,27 @@ class BasePractice:
                 db.UserTypeModel, db.UserTypeModel.id == db.PracticeModel.user_type_id
             )
             .join(db.UserModel, db.UserPracticeModel.user_id == db.UserModel.id)
+            .join(
+                db.TeacherModel, db.TeacherModel.id == db.UserPracticeModel.teacher_id
+            )
             .filter(db.UserPracticeModel.practice_id == pk)
+            .filter(db.TeacherModel.tell_id == teacher_tell_id)
         )
         return query.all()
 
     async def user_practice_list(self, client, callback_query):
-        practice_id, page = [int(i) for i in (callback_query.data.split("_")[6:8])]
-        user_practices = self.user_practices(practice_id)
+        match = re.search(
+            rf"teacher_{self.type}_practice_user_practice_list_(\d+)_(\d+)",
+            callback_query.data,
+        )
+        if not match:
+            return
+
+        practice_id = int(match.group(1))
+        page = int(match.group(2))
+
+        # practice_id, page = [int(i) for i in (callback_query.data.split("_")[6:8])]
+        user_practices = self.user_practices(practice_id, callback_query.from_user.id)
 
         if not user_practices:
             await callback_query.message.reply_text("هیچ تکلیفی ارسال نشده!")
@@ -201,9 +213,10 @@ class BasePractice:
                 f"◾️ تایپ یوزرهای سوال: {practice.user_type_name}\n"
                 f"◾️ تعداد یوزرهایی که پاسخ داده‌اند: {practice.total_count}\n"
                 f"◾️ تعداد پاسخ‌هایی که تحلیل سخنرانی شده‌اند: {practice.teacher_caption_count}",
-                reply_markup=get_paginated_keyboard(
+                reply_markup=user_practice_paginated_keyboard(
                     user_practices,
-                    page,
+                    0,
+                    practice_id,
                     f"teacher_{self.type}_practice_user_practice_list",
                     f"teacher_{self.type}_practice_user_practice_select",
                     back_query=f"teacher_{self.type}_practice_select_{practice_id}",
@@ -212,9 +225,10 @@ class BasePractice:
             return
 
         await callback_query.message.edit_reply_markup(
-            reply_markup=get_paginated_keyboard(
+            reply_markup=user_practice_paginated_keyboard(
                 user_practices,
                 page,
+                practice_id,
                 f"teacher_{self.type}_practice_user_practice_list",
                 f"teacher_{self.type}_practice_user_practice_select",
                 back_query=f"teacher_{self.type}_practice_select_{practice_id}",
@@ -233,6 +247,8 @@ class BasePractice:
                 db.PracticeModel.title.label("title"),
                 db.PracticeModel.caption.label("practice_caption"),
                 db.UserPracticeModel.practice_id.label("practice_id"),
+                db.UserPracticeModel.teacher_video_link,
+                db.UserPracticeModel.teacher_voice_link,
             )
             .join(
                 db.PracticeModel,
@@ -249,11 +265,28 @@ class BasePractice:
 
         await callback_query.message.delete()
 
-        capt = "تحلیل سخنرانی نشده!"
-        if user_practice.teacher_caption:
-            capt = (
-                "تحلیل سخنرانی شده.\n" f"تحلیل سخنرانی: {user_practice.teacher_caption}"
+        capt = "تحلیل سخنرانی شده.\n" f"تحلیل سخنرانی: {user_practice.teacher_caption}"
+        markup = []
+        if not user_practice.teacher_caption:
+            capt = "تحلیل سخنرانی نشده!"
+            markup.append(
+                [
+                    InlineKeyboardButton(
+                        "تحلیل سخنرانی",
+                        callback_data=f"teacher_{self.type}_practice_user_practice_correction_{user_practice_id}",
+                    )
+                ]
             )
+
+        markup.append(
+            [
+                InlineKeyboardButton(
+                    "🔙 بازگشت",
+                    callback_data=f"teacher_{self.type}_practice_user_practice_list_{user_practice.practice_id}_0",
+                ),
+                InlineKeyboardButton("exit!", callback_data="back_home"),
+            ]
+        )
 
         await callback_query.message.reply_video(
             video=user_practice.file_link,
@@ -262,26 +295,15 @@ class BasePractice:
             f"👤 نام کاربر: {user_practice.username}\n"
             f"◾️ کپشن کاربر:\n {user_practice.user_caption}\n"
             f"◾️ وضعیت تحلیل سخنرانی: {capt}",
-            reply_markup=InlineKeyboardMarkup(
-                [
-                    [
-                        InlineKeyboardButton(
-                            "تحلیل سخنرانی مجدد"
-                            if user_practice.teacher_caption
-                            else "تحلیل سخنرانی",
-                            callback_data=f"teacher_{self.type}_practice_user_practice_correction_{user_practice_id}",
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "🔙 بازگشت",
-                            callback_data=f"teacher_{self.type}_practice_user_practice_list_{user_practice.practice_id}_0",
-                        ),
-                        InlineKeyboardButton("exit!", callback_data="back_home"),
-                    ],
-                ]
-            ),
+            reply_markup=InlineKeyboardMarkup(markup),
         )
+
+        if user_practice.teacher_caption:
+            if user_practice.teacher_voice_link:
+                await callback_query.message.reply_voice(voice=user_practice.teacher_voice_link, caption="تحلیل سخنرانی")
+            if user_practice.teacher_video_link:
+                await callback_query.message.reply_video(video=user_practice.teacher_video_link, caption="تحلیل سخنرانی")
+
 
     async def correction(self, client, callback_query):
         user_practice_id = int(callback_query.data.split("_")[-1])
@@ -289,16 +311,78 @@ class BasePractice:
         await callback_query.message.delete()
 
         await callback_query.message.reply_text(
-            "پیام خود را ریپلی کنید." "\n<b>- اجباری -</b>",
+            "نوع تحلیل را انتخاب کنید:",
             reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("exit!", callback_data="back_home")]]
+                [
+                    [
+                        InlineKeyboardButton(
+                            "💬 متنی",
+                            callback_data=f"teacher_{self.type}_practice_user_practice_correction_type_0_{user_practice_id}",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "🔈 صوتی",
+                            callback_data=f"teacher_{self.type}_practice_user_practice_correction_type_1_{user_practice_id}",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "📹 ویدیوئی",
+                            callback_data=f"teacher_{self.type}_practice_user_practice_correction_type_2_{user_practice_id}",
+                        )
+                    ],
+                    [InlineKeyboardButton("exit!", callback_data="back_home")],
+                ]
             ),
         )
-        await callback_query.message.reply_text(
-            f"{user_practice_id}\n"
-            f"<b>Just send correction as a reply to this message</b>",
-            reply_markup=ForceReply(selective=True),
+
+    async def correction_type(self, client, callback_query):
+        match = re.search(
+            rf"teacher_{self.type}_practice_user_practice_correction_type_(\d+)_(\d+)",
+            callback_query.data,
         )
+        types_list = ["متنی", "صوتی", "ویدیوئی"]
+        if match:
+            await callback_query.message.delete()
+
+            type = int(match.group(1))
+            user_practice_id = int(match.group(2))
+
+            await callback_query.message.reply_text(
+                f"لطفا تحیلی <b>{types_list[type]}</b> را ریپلی کنید.",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "exit!",
+                                callback_data="back_home",
+                            )
+                        ]
+                    ]
+                ),
+            )
+
+            if type == 0:
+                await callback_query.message.reply_text(
+                    f"{user_practice_id}\n"
+                    "<b>Just send n correction as a reply to this message</b>",
+                    reply_markup=ForceReply(selective=True),
+                )
+            elif type == 1:
+                await callback_query.message.reply_text(
+                    f"{user_practice_id}\n"
+                    "<b>Just send n voice correction as a reply to this message</b>",
+                    reply_markup=ForceReply(selective=True),
+                )
+            else:
+                await callback_query.message.reply_text(
+                    f"{user_practice_id}\n"
+                    f"<b>Just send n video correction as a reply to this message</b>",
+                    reply_markup=ForceReply(selective=True),
+                )
+        else:
+            await callback_query.message.reply_text("error!")
 
     @staticmethod
     async def send_user_correction_notification(client, user_practice_id):
@@ -333,43 +417,12 @@ class BasePractice:
             return True
         return False
 
-    async def set_teacher_caption(self, client, message):
-        user_practice_id = int(message.reply_to_message.text.split("\n")[0])
-        if self.set_teacher_caption_db(user_practice_id, message.text):
-            await message.reply_text("با موفقیت ثبت شد.")
-            await message.reply_text(
-                "در صورت نیاز ویس تحلیل سخنرانی را نیز ریپلی کنید."
-                "\n<b>- اختیاری -</b>",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "مرحله بعد (آپلود ویدیو)",
-                                callback_data=f"teacher_{self.type}_practice_user_practice_next_{user_practice_id}",
-                            ),
-                            InlineKeyboardButton(
-                                "اتمام تحلیل",
-                                callback_data=f"teacher_{self.type}_practice_user_practice_done_{user_practice_id}",
-                            ),
-                        ]
-                    ]
-                ),
-            )
-            await message.reply_text(
-                f"{user_practice_id}\n"
-                f"<b>Just send voice correction as a reply to this message</b>",
-                reply_markup=ForceReply(selective=True),
-            )
-        else:
-            await message.reply_text("error!")
-
-        await message.reply_to_message.delete()
-
     @staticmethod
     def set_teacher_voice_db(pk, file_link):
         user_practice = db.session.query(db.UserPracticeModel).get(pk)
         if user_practice:
             user_practice.teacher_voice_link = file_link
+            user_practice.teacher_caption = "تحلیل صوتی است!"
             db.session.commit()
             return True
         return False
@@ -379,9 +432,34 @@ class BasePractice:
         user_practice = db.session.query(db.UserPracticeModel).get(pk)
         if user_practice:
             user_practice.teacher_video_link = file_link
+            user_practice.teacher_caption = "تحلیل ویدیوئی است!"
             db.session.commit()
             return True
         return False
+
+    async def correction_text(self, client, message):
+        user_practice_id = int(message.reply_to_message.text.split("\n")[0])
+
+        if self.set_teacher_caption_db(user_practice_id, message.text):
+            await message.reply_to_message.delete()
+            # await message.reply_text("ویس با موفقیت ثبت شد.")
+            await message.reply_text(
+                "آیا از ثبت این تحلیل سخنرانی اطمینان دارید؟",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "بلی",
+                                callback_data=f"teacher_{self.type}_practice_user_practice_confirm_{user_practice_id}_1",
+                            ),
+                            InlineKeyboardButton(
+                                "خیر",
+                                callback_data=f"teacher_{self.type}_practice_user_practice_confirm_{user_practice_id}_0",
+                            ),
+                        ]
+                    ]
+                ),
+            )
 
     async def correction_voice(self, client, message):
         user_practice_id = int(message.reply_to_message.text.split("\n")[0])
@@ -396,74 +474,26 @@ class BasePractice:
 
         # Forward the video to the channel
         await client.send_voice(chat_id=GROUP_CHAT_ID, voice=media_id, caption=capt)
-        self.set_teacher_voice_db(user_practice_id, media_id)
-
-        await message.reply_to_message.delete()
-        await message.reply_text("ویس با موفقیت ثبت شد.")
-
-        await message.reply_text(
-            "در صورت نیاز ویدیو تحلیل سخنرانی را نیز ریپلی کنید."
-            "\n<b>- اختیاری -</b>",
-            reply_markup=InlineKeyboardMarkup(
-                [
+        if self.set_teacher_voice_db(user_practice_id, media_id):
+            await message.reply_to_message.delete()
+            # await message.reply_text("ویس با موفقیت ثبت شد.")
+            await message.reply_text(
+                "آیا از ثبت این تحلیل سخنرانی اطمینان دارید؟",
+                reply_markup=InlineKeyboardMarkup(
                     [
-                        InlineKeyboardButton(
-                            "اتمام تحلیل",
-                            callback_data=f"teacher_{self.type}_practice_user_practice_done_{user_practice_id}",
-                        )
+                        [
+                            InlineKeyboardButton(
+                                "بلی",
+                                callback_data=f"teacher_{self.type}_practice_user_practice_confirm_{user_practice_id}_1",
+                            ),
+                            InlineKeyboardButton(
+                                "خیر",
+                                callback_data=f"teacher_{self.type}_practice_user_practice_confirm_{user_practice_id}_0",
+                            ),
+                        ]
                     ]
-                ]
-            ),
-        )
-        await message.reply_text(
-            f"{user_practice_id}\n"
-            f"<b>Just send video correction as a reply to this message</b>",
-            reply_markup=ForceReply(selective=True),
-        )
-
-    async def next_step(self, client, callback_query):
-        user_practice_id = int(callback_query.data.split("_")[-1])
-        await callback_query.message.delete()
-        await callback_query.message.reply_text(
-            "در صورت نیاز ویدیو تحلیل سخنرانی را نیز ریپلی کنید."
-            "\n<b>- اختیاری -</b>",
-            reply_markup=InlineKeyboardMarkup(
-                [
-                    [
-                        InlineKeyboardButton(
-                            "اتمام تحلیل",
-                            callback_data=f"teacher_{self.type}_practice_user_practice_done_{user_practice_id}",
-                        )
-                    ]
-                ]
-            ),
-        )
-        await callback_query.message.reply_text(
-            f"{user_practice_id}\n"
-            f"<b>Just send video correction as a reply to this message</b>",
-            reply_markup=ForceReply(selective=True),
-        )
-
-    async def done_step(self, client, callback_query):
-        user_practice_id = int(callback_query.data.split("_")[-1])
-        await callback_query.message.delete()
-        await callback_query.message.reply_text(
-            "آیا از ثبت این تحلیل سخنرانی اطمینان دارید؟",
-            reply_markup=InlineKeyboardMarkup(
-                [
-                    [
-                        InlineKeyboardButton(
-                            "بلی",
-                            callback_data=f"teacher_{self.type}_practice_user_practice_confirm_{user_practice_id}_1",
-                        ),
-                        InlineKeyboardButton(
-                            "خیر",
-                            callback_data=f"teacher_{self.type}_practice_user_practice_confirm_{user_practice_id}_0",
-                        ),
-                    ]
-                ]
-            ),
-        )
+                ),
+            )
 
     async def correction_video(self, client, message):
         user_practice_id = int(message.reply_to_message.text.split("\n")[0])
@@ -483,29 +513,27 @@ class BasePractice:
 
         # Forward the video to the channel
         await client.send_video(chat_id=GROUP_CHAT_ID, video=media_id, caption=capt)
-        self.set_teacher_video_db(user_practice_id, media_id)
+        if self.set_teacher_video_db(user_practice_id, media_id):
+            await message.reply_to_message.delete()
+            # await message.reply_text("ویدئو با موفقیت ثبت شد.")
 
-        await message.reply_to_message.delete()
-        await message.reply_text("ویدئو با موفقیت ثبت شد.")
-        # await send_home_message_teacher(message)
-
-        await message.reply_text(
-            "آیا از ثبت این تحلیل سخنرانی اطمینان دارید؟",
-            reply_markup=InlineKeyboardMarkup(
-                [
+            await message.reply_text(
+                "آیا از ثبت این تحلیل سخنرانی اطمینان دارید؟",
+                reply_markup=InlineKeyboardMarkup(
                     [
-                        InlineKeyboardButton(
-                            "بلی",
-                            callback_data=f"teacher_{self.type}_practice_user_practice_confirm_{user_practice_id}_1",
-                        ),
-                        InlineKeyboardButton(
-                            "خیر",
-                            callback_data=f"teacher_{self.type}_practice_user_practice_confirm_{user_practice_id}_0",
-                        ),
+                        [
+                            InlineKeyboardButton(
+                                "بلی",
+                                callback_data=f"teacher_none_practice_user_practice_confirm_{user_practice_id}_1",
+                            ),
+                            InlineKeyboardButton(
+                                "خیر",
+                                callback_data=f"teacher_none_practice_user_practice_confirm_{user_practice_id}_0",
+                            ),
+                        ]
                     ]
-                ]
-            ),
-        )
+                ),
+            )
 
     @staticmethod
     def clear_correction_db(pk):
@@ -704,6 +732,12 @@ class NONEPractice:
             & filters.create(is_teacher)
         )(self.user_practice_select)
         self.app.on_callback_query(
+            filters.regex(
+                r"teacher_none_practice_user_practice_correction_type_(\d+)_(\d+)"
+            )
+            & filters.create(is_teacher)
+        )(self.correction_type)
+        self.app.on_callback_query(
             filters.regex(r"teacher_none_practice_user_practice_correction_(\d+)")
             & filters.create(is_teacher)
         )(self.correction)
@@ -712,7 +746,7 @@ class NONEPractice:
             & filters.text
             & filters.create(is_teacher)
             & filters.create(self.is_new_correction_msg)
-        )(self.set_teacher_caption)
+        )(self.correction_text)
         self.app.on_message(
             filters.reply
             & filters.voice
@@ -729,14 +763,6 @@ class NONEPractice:
             filters.regex(r"teacher_none_practice_user_practice_confirm_(\d+)_(\d+)")
             & filters.create(is_teacher)
         )(self.confirm)
-        self.app.on_callback_query(
-            filters.regex(r"teacher_none_practice_user_practice_next_(\d+)")
-            & filters.create(is_teacher)
-        )(self.next_step)
-        self.app.on_callback_query(
-            filters.regex(r"teacher_none_practice_user_practice_done_(\d+)")
-            & filters.create(is_teacher)
-        )(self.done_step)
 
     def is_new_correction_msg(filter, client, update):
         return (
@@ -844,6 +870,8 @@ class NONEPractice:
                 db.PracticeModel.caption.label("practice_caption"),
                 db.UserPracticeModel.practice_id.label("practice_id"),
                 db.UserPracticeModel.teacher_id.label("techer_id"),
+                db.UserPracticeModel.teacher_video_link,
+                db.UserPracticeModel.teacher_video_link,
             )
             .join(
                 db.PracticeModel,
@@ -860,11 +888,28 @@ class NONEPractice:
 
         await callback_query.message.delete()
 
-        capt = "تحلیل سخنرانی نشده!"
-        if user_practice.teacher_caption:
-            capt = (
-                "تحلیل سخنرانی شده.\n" f"تحلیل سخنرانی: {user_practice.teacher_caption}"
-            )
+        capt = "تحلیل سخنرانی شده.\n" f"تحلیل سخنرانی: {user_practice.teacher_caption}"
+        markup = []
+        if not user_practice.teacher_caption:
+            capt = "تحلیل سخنرانی نشده!"
+            markup = [
+                [
+                    InlineKeyboardButton(
+                        "تحلیل سخنرانی",
+                        callback_data=f"teacher_none_practice_user_practice_correction_{user_practice_id}",
+                    )
+                ]
+            ]
+
+        markup.append(
+            [
+                InlineKeyboardButton(
+                    "🔙 بازگشت",
+                    callback_data=f"teacher_none_practice_user_practice_list_{user_practice.practice_id}_0",
+                ),
+                InlineKeyboardButton("exit!", callback_data="back_home"),
+            ]
+        )
 
         await callback_query.message.reply_video(
             video=user_practice.file_link,
@@ -873,26 +918,14 @@ class NONEPractice:
             f"👤 نام کاربر: {user_practice.username}\n"
             f"◾️ کپشن کاربر:\n {user_practice.user_caption}\n"
             f"◾️ وضعیت تحلیل سخنرانی: {capt}",
-            reply_markup=InlineKeyboardMarkup(
-                [
-                    [
-                        InlineKeyboardButton(
-                            "تحلیل سخنرانی مجدد"
-                            if user_practice.teacher_caption
-                            else "تحلیل سخنرانی",
-                            callback_data=f"teacher_none_practice_user_practice_correction_{user_practice_id}",
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "🔙 بازگشت",
-                            callback_data=f"teacher_none_practice_user_practice_list_{user_practice.practice_id}_0",
-                        ),
-                        InlineKeyboardButton("exit!", callback_data="back_home"),
-                    ],
-                ]
-            ),
+            reply_markup=InlineKeyboardMarkup(markup),
         )
+
+        if user_practice.teacher_caption:
+            if user_practice.teacher_voice_link:
+                await callback_query.message.reply_voice(voice=user_practice.teacher_voice_link, caption="تحلیل سخنرانی")
+            if user_practice.teacher_video_link:
+                await callback_query.message.reply_video(video=user_practice.teacher_video_link, caption="تحلیل سخنرانی")
 
     async def correction(self, client, callback_query):
         user_practice_id = int(callback_query.data.split("_")[-1])
@@ -900,16 +933,78 @@ class NONEPractice:
         await callback_query.message.delete()
 
         await callback_query.message.reply_text(
-            "پیام خود را ریپلی کنید.",
+            "نوع تحلیل را انتخاب کنید:",
             reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("exit!", callback_data="back_home")]]
+                [
+                    [
+                        InlineKeyboardButton(
+                            "💬 متنی",
+                            callback_data=f"teacher_none_practice_user_practice_correction_type_0_{user_practice_id}",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "🔈 صوتی",
+                            callback_data=f"teacher_none_practice_user_practice_correction_type_1_{user_practice_id}",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "📹 ویدیوئی",
+                            callback_data=f"teacher_none_practice_user_practice_correction_type_2_{user_practice_id}",
+                        )
+                    ],
+                    [InlineKeyboardButton("exit!", callback_data="back_home")],
+                ]
             ),
         )
-        await callback_query.message.reply_text(
-            f"{user_practice_id}\n"
-            "<b>Just send n correction as a reply to this message</b>",
-            reply_markup=ForceReply(selective=True),
+
+    async def correction_type(self, client, callback_query):
+        match = re.search(
+            r"teacher_none_practice_user_practice_correction_type_(\d+)_(\d+)",
+            callback_query.data,
         )
+        types_list = ["متنی", "صوتی", "ویدیوئی"]
+        if match:
+            await callback_query.message.delete()
+
+            type = int(match.group(1))
+            user_practice_id = int(match.group(2))
+
+            await callback_query.message.reply_text(
+                f"لطفا تحیلی <b>{types_list[type]}</b> را ریپلی کنید.",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "exit!",
+                                callback_data="back_home",
+                            )
+                        ]
+                    ]
+                ),
+            )
+
+            if type == 0:
+                await callback_query.message.reply_text(
+                    f"{user_practice_id}\n"
+                    "<b>Just send n correction as a reply to this message</b>",
+                    reply_markup=ForceReply(selective=True),
+                )
+            elif type == 1:
+                await callback_query.message.reply_text(
+                    f"{user_practice_id}\n"
+                    "<b>Just send n voice correction as a reply to this message</b>",
+                    reply_markup=ForceReply(selective=True),
+                )
+            else:
+                await callback_query.message.reply_text(
+                    f"{user_practice_id}\n"
+                    f"<b>Just send n video correction as a reply to this message</b>",
+                    reply_markup=ForceReply(selective=True),
+                )
+        else:
+            await callback_query.message.reply_text("error!")
 
     @staticmethod
     async def send_user_correction_notification(client, user_practice_id):
@@ -944,44 +1039,12 @@ class NONEPractice:
             return True
         return False
 
-    async def set_teacher_caption(self, client, message):
-        user_practice_id = int(message.reply_to_message.text.split("\n")[0])
-        if self.set_teacher_caption_db(user_practice_id, message.text):
-            await message.reply_text("با موفقیت ثبت شد.")
-            await message.reply_text(
-                "در صورت نیاز ویس تحلیل سخنرانی را نیز ریپلی کنید."
-                "\n<b>- اختیاری -</b>",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "مرحله بعد (آپلود ویدیو)",
-                                callback_data=f"teacher_none_practice_user_practice_next_{user_practice_id}",
-                            ),
-                            InlineKeyboardButton(
-                                "اتمام تحلیل",
-                                callback_data=f"teacher_none_practice_user_practice_done_{user_practice_id}",
-                            ),
-                        ]
-                    ]
-                ),
-            )
-            await message.reply_text(
-                f"{user_practice_id}\n"
-                "<b>Just send n voice correction as a reply to this message</b>",
-                reply_markup=ForceReply(selective=True),
-            )
-
-        else:
-            await message.reply_text("error!")
-
-        await message.reply_to_message.delete()
-
     @staticmethod
     def set_teacher_voice_db(pk, file_link):
         user_practice = db.session.query(db.UserPracticeModel).get(pk)
         if user_practice:
             user_practice.teacher_voice_link = file_link
+            user_practice.teacher_caption = "تحلیل صوتی است!"
             db.session.commit()
             return True
         return False
@@ -991,9 +1054,34 @@ class NONEPractice:
         user_practice = db.session.query(db.UserPracticeModel).get(pk)
         if user_practice:
             user_practice.teacher_video_link = file_link
+            user_practice.teacher_caption = "تحلیل ویدیوئی است!"
             db.session.commit()
             return True
         return False
+
+    async def correction_text(self, client, message):
+        user_practice_id = int(message.reply_to_message.text.split("\n")[0])
+
+        if self.set_teacher_caption_db(user_practice_id, message.text):
+            await message.reply_to_message.delete()
+            # await message.reply_text("ویس با موفقیت ثبت شد.")
+            await message.reply_text(
+                "آیا از ثبت این تحلیل سخنرانی اطمینان دارید؟",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "بلی",
+                                callback_data=f"teacher_none_practice_user_practice_confirm_{user_practice_id}_1",
+                            ),
+                            InlineKeyboardButton(
+                                "خیر",
+                                callback_data=f"teacher_none_practice_user_practice_confirm_{user_practice_id}_0",
+                            ),
+                        ]
+                    ]
+                ),
+            )
 
     async def correction_voice(self, client, message):
         user_practice_id = int(message.reply_to_message.text.split("\n")[0])
@@ -1008,74 +1096,26 @@ class NONEPractice:
 
         # Forward the video to the channel
         await client.send_voice(chat_id=GROUP_CHAT_ID, voice=media_id, caption=capt)
-        self.set_teacher_voice_db(user_practice_id, media_id)
-
-        await message.reply_to_message.delete()
-        await message.reply_text("ویس با موفقیت ثبت شد.")
-
-        await message.reply_text(
-            "در صورت نیاز ویدیو تحلیل سخنرانی را نیز ریپلی کنید."
-            "\n<b>- اختیاری -</b>",
-            reply_markup=InlineKeyboardMarkup(
-                [
+        if self.set_teacher_voice_db(user_practice_id, media_id):
+            await message.reply_to_message.delete()
+            # await message.reply_text("ویس با موفقیت ثبت شد.")
+            await message.reply_text(
+                "آیا از ثبت این تحلیل سخنرانی اطمینان دارید؟",
+                reply_markup=InlineKeyboardMarkup(
                     [
-                        InlineKeyboardButton(
-                            "اتمام تحلیل",
-                            callback_data=f"teacher_none_practice_user_practice_done_{user_practice_id}",
-                        )
+                        [
+                            InlineKeyboardButton(
+                                "بلی",
+                                callback_data=f"teacher_none_practice_user_practice_confirm_{user_practice_id}_1",
+                            ),
+                            InlineKeyboardButton(
+                                "خیر",
+                                callback_data=f"teacher_none_practice_user_practice_confirm_{user_practice_id}_0",
+                            ),
+                        ]
                     ]
-                ]
-            ),
-        )
-        await message.reply_text(
-            f"{user_practice_id}\n"
-            f"<b>Just send n video correction as a reply to this message</b>",
-            reply_markup=ForceReply(selective=True),
-        )
-
-    async def next_step(self, client, callback_query):
-        user_practice_id = int(callback_query.data.split("_")[-1])
-        await callback_query.message.delete()
-        await callback_query.message.reply_text(
-            "در صورت نیاز ویدیو تحلیل سخنرانی را نیز ریپلی کنید."
-            "\n<b>- اختیاری -</b>",
-            reply_markup=InlineKeyboardMarkup(
-                [
-                    [
-                        InlineKeyboardButton(
-                            "اتمام تحلیل",
-                            callback_data=f"teacher_none_practice_user_practice_done_{user_practice_id}",
-                        )
-                    ]
-                ]
-            ),
-        )
-        await callback_query.message.reply_text(
-            f"{user_practice_id}\n"
-            f"<b>Just send n video correction as a reply to this message</b>",
-            reply_markup=ForceReply(selective=True),
-        )
-
-    async def done_step(self, client, callback_query):
-        user_practice_id = int(callback_query.data.split("_")[-1])
-        await callback_query.message.delete()
-        await callback_query.message.reply_text(
-            "آیا از ثبت این تحلیل سخنرانی اطمینان دارید؟",
-            reply_markup=InlineKeyboardMarkup(
-                [
-                    [
-                        InlineKeyboardButton(
-                            "بلی",
-                            callback_data=f"teacher_none_practice_user_practice_confirm_{user_practice_id}_1",
-                        ),
-                        InlineKeyboardButton(
-                            "خیر",
-                            callback_data=f"teacher_none_practice_user_practice_confirm_{user_practice_id}_0",
-                        ),
-                    ]
-                ]
-            ),
-        )
+                ),
+            )
 
     async def correction_video(self, client, message):
         user_practice_id = int(message.reply_to_message.text.split("\n")[0])
@@ -1095,29 +1135,27 @@ class NONEPractice:
 
         # Forward the video to the channel
         await client.send_video(chat_id=GROUP_CHAT_ID, video=media_id, caption=capt)
-        self.set_teacher_video_db(user_practice_id, media_id)
+        if self.set_teacher_video_db(user_practice_id, media_id):
+            await message.reply_to_message.delete()
+            # await message.reply_text("ویدئو با موفقیت ثبت شد.")
 
-        await message.reply_to_message.delete()
-        await message.reply_text("ویدئو با موفقیت ثبت شد.")
-        # await send_home_message_teacher(message)
-
-        await message.reply_text(
-            "آیا از ثبت این تحلیل سخنرانی اطمینان دارید؟",
-            reply_markup=InlineKeyboardMarkup(
-                [
+            await message.reply_text(
+                "آیا از ثبت این تحلیل سخنرانی اطمینان دارید؟",
+                reply_markup=InlineKeyboardMarkup(
                     [
-                        InlineKeyboardButton(
-                            "بلی",
-                            callback_data=f"teacher_none_practice_user_practice_confirm_{user_practice_id}_1",
-                        ),
-                        InlineKeyboardButton(
-                            "خیر",
-                            callback_data=f"teacher_none_practice_user_practice_confirm_{user_practice_id}_0",
-                        ),
+                        [
+                            InlineKeyboardButton(
+                                "بلی",
+                                callback_data=f"teacher_none_practice_user_practice_confirm_{user_practice_id}_1",
+                            ),
+                            InlineKeyboardButton(
+                                "خیر",
+                                callback_data=f"teacher_none_practice_user_practice_confirm_{user_practice_id}_0",
+                            ),
+                        ]
                     ]
-                ]
-            ),
-        )
+                ),
+            )
 
     @staticmethod
     def clear_correction_db(pk):

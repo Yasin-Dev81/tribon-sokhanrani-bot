@@ -11,6 +11,7 @@ from .pagination import (
     get_paginated_keyboard,
     users_paginated_keyboard,
     teachers_paginated_keyboard,
+    user_practice_paginated_keyboard,
 )
 import db
 
@@ -225,7 +226,7 @@ class BasePractice:
             & filters.user(ADMINS_LIST_ID)
         )(self.select)
         self.app.on_callback_query(
-            filters.regex(rf"admin_{self.type}_practice_user_practice_list_(\d+)")
+            filters.regex(rf"admin_{self.type}_practice_user_practice_list_(\d+)_(\d+)")
             & filters.user(ADMINS_LIST_ID)
         )(self.user_practice_list)
         self.app.on_callback_query(
@@ -252,6 +253,30 @@ class BasePractice:
             filters.regex(rf"admin_{self.type}_practice_practice_delete_(\d+)")
             & filters.user(ADMINS_LIST_ID)
         )(self.delete)
+        self.app.on_callback_query(
+            filters.regex(
+                rf"admin_{self.type}_practice_user_practice_rm_teacher_caption_(\d+)"
+            )
+            & filters.user(ADMINS_LIST_ID)
+        )(self.rm_teacher_caption)
+        self.app.on_callback_query(
+            filters.regex(
+                rf"admin_{self.type}_practice_user_practice_confirm_rm_teacher_caption_(\d+)"
+            )
+            & filters.user(ADMINS_LIST_ID)
+        )(self.confirm_rm_teacher_caption)
+        self.app.on_callback_query(
+            filters.regex(
+                rf"admin_{self.type}_practice_user_practice_confirm_rm_(\d+)"
+            )
+            & filters.user(ADMINS_LIST_ID)
+        )(self.confirm_rm_user_practice)
+        self.app.on_callback_query(
+            filters.regex(
+                rf"admin_{self.type}_practice_user_practice_rm_(\d+)"
+            )
+            & filters.user(ADMINS_LIST_ID)
+        )(self.rm_user_practice)
 
     @staticmethod
     def report_practice(pk):
@@ -358,9 +383,10 @@ class BasePractice:
                 f"◾️ تایپ یوزرهای سوال: {practice.user_type_name}\n"
                 f"◾️ تعداد یوزرهایی که پاسخ داده‌اند: {practice.total_count}\n"
                 f"◾️ تعداد پاسخ‌هایی که تحلیل سخنرانی شده‌اند: {practice.teacher_caption_count}",
-                reply_markup=get_paginated_keyboard(
+                reply_markup=user_practice_paginated_keyboard(
                     user_practices,
                     page,
+                    practice_id,
                     f"admin_{self.type}_practice_user_practice_list",
                     f"admin_{self.type}_practice_user_practice_select",
                     back_query=f"admin_{self.type}_practice_select_{practice_id}",
@@ -369,9 +395,10 @@ class BasePractice:
             return
 
         await callback_query.message.edit_reply_markup(
-            reply_markup=get_paginated_keyboard(
+            reply_markup=user_practice_paginated_keyboard(
                 user_practices,
                 page,
+                practice_id,
                 f"admin_{self.type}_practice_user_practice_list",
                 f"admin_{self.type}_practice_user_practice_select",
                 back_query=f"admin_{self.type}_practice_select_{practice_id}",
@@ -392,6 +419,9 @@ class BasePractice:
                 db.UserPracticeModel.practice_id.label("practice_id"),
                 db.UserTypeModel.name.label("user_type_name"),
                 db.UserModel.phone_number,
+                db.UserPracticeModel.teacher_id,
+                db.UserPracticeModel.teacher_video_link,
+                db.UserPracticeModel.teacher_voice_link,
             )
             .join(
                 db.PracticeModel,
@@ -410,13 +440,22 @@ class BasePractice:
         await callback_query.message.delete()
 
         capt = "تحلیل سخنرانی نشده!"
+        stat = "تخصیص معلم"
+        if user_practice.teacher_id:
+            stat = "عوض کردن معلم"
         markup = InlineKeyboardMarkup(
             [
                 [
                     # fix
                     InlineKeyboardButton(
-                        "عوض کردن معلم",
+                        stat,
                         callback_data=f"admin_{self.type}_practice_user_practice_teacher_selection_list_{user_practice_id}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "🗑 حذف تکلیف",
+                        callback_data=f"admin_{self.type}_practice_user_practice_confirm_rm_{user_practice_id}",
                     )
                 ],
                 [
@@ -436,11 +475,21 @@ class BasePractice:
                 [
                     [
                         InlineKeyboardButton(
+                            "🗑 حذف تکلیف",
+                            callback_data=f"admin_{self.type}_practice_user_practice_confirm_rm_{user_practice_id}",
+                        ),
+                        InlineKeyboardButton(
+                            "🗑 حذف تحلیل",
+                            callback_data=f"admin_{self.type}_practice_user_practice_confirm_rm_teacher_caption_{user_practice_id}",
+                        ),
+                    ],
+                    [
+                        InlineKeyboardButton(
                             "🔙 بازگشت",
                             callback_data=f"admin_{self.type}_practice_user_practice_list_{user_practice.practice_id}_0",
                         ),
                         InlineKeyboardButton("exit!", callback_data="back_home"),
-                    ]
+                    ],
                 ]
             )
 
@@ -455,6 +504,99 @@ class BasePractice:
             f"◾️ وضعیت تحلیل سخنرانی: {capt}",
             reply_markup=markup,
         )
+
+        if user_practice.teacher_caption:
+            if user_practice.teacher_voice_link:
+                await callback_query.message.reply_voice(
+                    voice=user_practice.teacher_voice_link,
+                    caption="تحلیل سخنرانی",
+                )
+            if user_practice.teacher_video_link:
+                await callback_query.message.reply_video(
+                    video=user_practice.teacher_video_link,
+                    caption="تحلیل سخنرانی",
+                )
+
+    @staticmethod
+    def clear_correction_db(pk):
+        with db.session as db_session:
+            user_practice = db_session.query(db.UserPracticeModel).get(pk)
+            if user_practice:
+                user_practice.teacher_caption = None
+                user_practice.teacher_voice_link = None
+                user_practice.teacher_video_link = None
+                db_session.commit()
+                return True
+            return False
+
+    async def confirm_rm_teacher_caption(self, client, callback_query):
+        user_practice_id = int(callback_query.data.split("_")[-1])
+        await callback_query.message.delete()
+
+        await callback_query.message.reply_text(
+            "مطمئنی مرد؟",
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "بله",
+                            callback_data=f"admin_{self.type}_practice_user_practice_rm_teacher_caption_{user_practice_id}",
+                        ),
+                        InlineKeyboardButton(
+                            "نه!",
+                            callback_data=f"admin_{self.type}_practice_user_practice_select_{user_practice_id}",
+                        ),
+                    ]
+                ]
+            ),
+        )
+
+    async def rm_teacher_caption(self, client, callback_query):
+        user_practice_id = int(callback_query.data.split("_")[-1])
+
+        if self.clear_correction_db(user_practice_id):
+            await callback_query.message.reply_text("تحلیل با موفقیت حذف شد.")
+
+            await callback_query.message.delete()
+
+    async def confirm_rm_user_practice(self, client, callback_query):
+        user_practice_id = int(callback_query.data.split("_")[-1])
+        await callback_query.message.delete()
+
+        await callback_query.message.reply_text(
+            "مطمئنی مرد؟",
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "بله",
+                            callback_data=f"admin_{self.type}_practice_user_practice_rm_{user_practice_id}",
+                        ),
+                        InlineKeyboardButton(
+                            "نه!",
+                            callback_data=f"admin_{self.type}_practice_user_practice_select_{user_practice_id}",
+                        ),
+                    ]
+                ]
+            ),
+        )
+
+    @staticmethod
+    def delete_user_practice(pk):
+        user_practice = db.session.query(db.UserPracticeModel).get(pk)
+        if user_practice:
+            db.session.delete(user_practice)
+            db.session.commit()
+            return True
+        return False
+
+    async def rm_user_practice(self, client, callback_query):
+        user_practice_id = int(callback_query.data.split("_")[-1])
+
+        if self.delete_user_practice(user_practice_id):
+            await callback_query.message.reply_text("تکلیف با موفقیت حذف شد.")
+
+            await callback_query.message.delete()
 
     async def teacher_selection_list(self, client, callback_query):
         user_practice_id = int(callback_query.data.split("_")[-1])
@@ -855,7 +997,7 @@ class NONEPractice:
 
         capt = "تحلیل سخنرانی نشده!"
         x = "تخصیص معلم"
-        if user_practice.techer_id and not user_practice.teacher_caption:
+        if user_practice.techer_id:
             x = "عوض کردن معلم"
         markup = InlineKeyboardMarkup(
             [
@@ -1214,7 +1356,10 @@ class Users:
 
     @staticmethod
     def not_in_db(phone_num):
-        return db.session.query(db.UserModel).filter_by(phone_number=phone_num).first() is None
+        return (
+            db.session.query(db.UserModel).filter_by(phone_number=phone_num).first()
+            is None
+        )
 
     @staticmethod
     def add_db(phone_num):
@@ -1502,7 +1647,10 @@ class Teachers:
 
     @staticmethod
     def not_in_db(phone_num):
-        return db.session.query(db.TeacherModel).filter_by(phone_number=phone_num).first() is None
+        return (
+            db.session.query(db.TeacherModel).filter_by(phone_number=phone_num).first()
+            is None
+        )
 
     @staticmethod
     def add_db(phone_num):

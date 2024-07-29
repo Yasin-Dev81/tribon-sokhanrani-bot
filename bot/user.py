@@ -251,7 +251,7 @@ class ActivePractice:
         await callback_query.message.delete()
 
         await callback_query.message.reply_text(
-            "پیام خود را ریپلی کنید.",
+            "ویدیوی خود را ریپلی کنید.",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("exit!", callback_data="back_home")]]
             ),
@@ -616,7 +616,7 @@ class AnsweredPractice:
         await callback_query.message.delete()
 
         await callback_query.message.reply_text(
-            "پیام خود را ریپلی کنید.",
+            "ویدیوی خود را ریپلی کنید.",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("exit!", callback_data="back_home")]]
             ),

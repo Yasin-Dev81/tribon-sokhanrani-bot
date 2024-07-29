@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, BigInteger
+
 # from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
@@ -21,7 +22,7 @@ class User(Base):
     name = Column(String(100), nullable=True)
     user_type_id = Column(Integer, ForeignKey("user_type.id"))
 
-    user_type = relationship("UserType")
+    user_type = relationship("UserType", foreign_keys="User.user_type_id")
 
     def __repr__(self):
         return f"{self.name} | {self.phone_number}"
@@ -48,7 +49,7 @@ class Practice(Base):
     start_date = Column(DateTime)
     user_type_id = Column(Integer, ForeignKey("user_type.id"))
 
-    user_type = relationship("UserType")
+    user_type = relationship("UserType", foreign_keys="Practice.user_type_id")
 
     def __repr__(self):
         return self.title
@@ -57,15 +58,17 @@ class Practice(Base):
 class UserPractice(Base):
     __tablename__ = "user_practice"
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("user.id"))
+    user_id = Column(Integer, ForeignKey("user.id"), primary_key=True)
     user_caption = Column(Text, nullable=True)
     file_link = Column(Text, nullable=False)
-    teacher_id = Column(Integer, ForeignKey("teacher.id"), nullable=True)
-    practice_id = Column(Integer, ForeignKey("practice.id"))
+    teacher_id = Column(
+        Integer, ForeignKey("teacher.id"), nullable=True, primary_key=True
+    )
+    practice_id = Column(Integer, ForeignKey("practice.id"), primary_key=True)
     teacher_caption = Column(Text, nullable=True)
     teacher_voice_link = Column(Text, nullable=True)
     teacher_video_link = Column(Text, nullable=True)
 
-    user = relationship("User")
-    teacher = relationship("Teacher")
-    practice = relationship("Practice")
+    user = relationship("User", foreign_keys="UserPractice.user_id")
+    teacher = relationship("Teacher", foreign_keys="UserPractice.teacher_id")
+    practice = relationship("Practice", foreign_keys="UserPractice.practice_id")

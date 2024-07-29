@@ -469,7 +469,8 @@ class BasePractice:
         )
         if user_practice.teacher_caption:
             capt = (
-                "تحلیل سخنرانی شده.\n" f"تحلیل سخنرانی: {user_practice.teacher_caption}"
+                "تحلیل سخنرانی شده.\n"
+                f"◾️ تحلیل سخنرانی: {user_practice.teacher_caption}"
             )
             markup = InlineKeyboardMarkup(
                 [
@@ -901,7 +902,7 @@ class NONEPractice:
         query = (
             db.session.query(
                 db.UserPracticeModel.id,
-                (db.UserModel.name + " - " + db.PracticeModel.title).label("title"),
+                (db.UserModel.name + " | " + db.PracticeModel.title).label("title"),
             )
             .join(
                 db.PracticeModel,
@@ -1019,7 +1020,8 @@ class NONEPractice:
         )
         if user_practice.teacher_caption:
             capt = (
-                "تحلیل سخنرانی شده.\n" f"تحلیل سخنرانی: {user_practice.teacher_caption}"
+                "تحلیل سخنرانی شده.\n"
+                f"◾️ تحلیل سخنرانی: {user_practice.teacher_caption}"
             )
             markup = InlineKeyboardMarkup(
                 [
@@ -1038,10 +1040,10 @@ class NONEPractice:
             caption=f"📌 عنوان سوال: {user_practice.title}\n"
             f"🔖 متن سوال: {user_practice.practice_caption}\n"
             f"👤 کاربر: {user_practice.username}\n"
-            f"نوع کاربر: {user_practice.user_type_name}\n"
-            f"شماره کاربر: {user_practice.phone_number}\n"
-            f"کپشن کاربر:\n {user_practice.user_caption}\n"
-            f"وضعیت تحلیل سخنرانی: {capt}",
+            f"◾️ نوع کاربر: {user_practice.user_type_name}\n"
+            f"◾️ شماره کاربر: {user_practice.phone_number}\n"
+            f"◾️ کپشن کاربر:\n {user_practice.user_caption}\n"
+            f"◾️ وضعیت تحلیل سخنرانی: {capt}",
             reply_markup=markup,
         )
 
@@ -1127,6 +1129,189 @@ class NONEPractice:
             await callback_query.message.reply_text("error!")
 
             await callback_query.message.delete()
+
+
+class DonePractice:
+    def __init__(self, app):
+        self.app = app
+        self.register_handlers()
+
+    def register_handlers(self):
+        self.app.on_message(
+            filters.regex("تکالیف تحلیل شده") & filters.user(ADMINS_LIST_ID)
+        )(self.list)
+        self.app.on_callback_query(
+            filters.regex(r"admin_done_practice_paginate_list_(\d+)")
+            & filters.user(ADMINS_LIST_ID)
+        )(self.paginate_list)
+        self.app.on_callback_query(
+            filters.regex(r"admin_done_practice_user_practice_select_(\d+)")
+            & filters.user(ADMINS_LIST_ID)
+        )(self.user_practice_select)
+
+    @property
+    def user_practices(self):
+        query = (
+            db.session.query(
+                db.UserPracticeModel.id,
+                (db.UserModel.name + " | " + db.PracticeModel.title).label("title"),
+            )
+            .join(
+                db.PracticeModel,
+                db.UserPracticeModel.practice_id == db.PracticeModel.id,
+                isouter=True,
+            )
+            .join(
+                db.UserModel,
+                db.UserPracticeModel.user_id == db.UserModel.id,
+                isouter=True,
+            )
+            .filter(db.UserPracticeModel.teacher_caption.is_not(None))
+        )
+
+        return query.all()
+
+    async def list(self, client, message):
+        if not self.user_practices:
+            await message.reply_text("هیچ تکلیفی موجود نیست!")
+            return
+
+        await message.reply_text(
+            "تمامی تکالیف:",
+            reply_markup=get_paginated_keyboard(
+                self.user_practices,
+                0,
+                "admin_done_practice_paginate_list",
+                "admin_done_practice_user_practice_select",
+            ),
+        )
+
+    async def paginate_list(self, client, callback_query):
+        page = int(callback_query.data.split("_")[-1])
+
+        if not self.user_practices:
+            await callback_query.message.delete()
+            await callback_query.message.reply_text("هیچ تمرین فعالی موجود نیست!")
+            return
+
+        if page == 0:
+            await callback_query.message.delete()
+            await callback_query.message.reply_text(
+                "تمارین فعال:",
+                reply_markup=get_paginated_keyboard(
+                    self.user_practices,
+                    page,
+                    "admin_done_practice_paginate_list",
+                    "admin_done_practice_user_practice_select",
+                ),
+            )
+            return
+
+        await callback_query.message.edit_reply_markup(
+            reply_markup=get_paginated_keyboard(
+                self.user_practices,
+                page,
+                "admin_done_practice_paginate_list",
+                "admin_done_practice_user_practice_select",
+            )
+        )
+
+    @staticmethod
+    def user_practice(pk):
+        query = (
+            db.session.query(
+                db.UserPracticeModel.id.label("id"),
+                db.UserModel.name.label("username"),
+                db.UserPracticeModel.file_link.label("file_link"),
+                db.UserPracticeModel.user_caption.label("user_caption"),
+                db.UserPracticeModel.teacher_caption.label("teacher_caption"),
+                db.PracticeModel.title.label("title"),
+                db.PracticeModel.caption.label("practice_caption"),
+                db.UserPracticeModel.practice_id.label("practice_id"),
+                db.UserPracticeModel.teacher_id.label("techer_id"),
+                db.UserTypeModel.name.label("user_type_name"),
+                db.UserModel.phone_number,
+                db.UserPracticeModel.teacher_video_link,
+                db.UserPracticeModel.teacher_voice_link,
+            )
+            .join(
+                db.PracticeModel,
+                db.PracticeModel.id == db.UserPracticeModel.practice_id,
+            )
+            .join(db.UserModel, db.UserModel.id == db.UserPracticeModel.user_id)
+            .join(db.UserTypeModel, db.UserModel.user_type_id == db.UserTypeModel.id)
+            .filter(db.UserPracticeModel.id == pk)
+        )
+        return query.first()
+
+    async def user_practice_select(self, client, callback_query):
+        user_practice_id = int(callback_query.data.split("_")[-1])
+        user_practice = self.user_practice(user_practice_id)
+
+        await callback_query.message.delete()
+
+        capt = "تحلیل سخنرانی نشده!"
+        x = "تخصیص معلم"
+        if user_practice.techer_id:
+            x = "عوض کردن معلم"
+        markup = InlineKeyboardMarkup(
+            [
+                [
+                    # fix
+                    InlineKeyboardButton(
+                        x,
+                        callback_data=f"admin_none_practice_user_practice_teacher_selection_list_{user_practice_id}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "🔙 بازگشت",
+                        callback_data="admin_done_practice_paginate_list_0",
+                    ),
+                    InlineKeyboardButton("exit!", callback_data="back_home"),
+                ],
+            ]
+        )
+        if user_practice.teacher_caption:
+            capt = (
+                "تحلیل سخنرانی شده.\n"
+                f"◾️ تحلیل سخنرانی: {user_practice.teacher_caption}"
+            )
+            markup = InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "🔙 بازگشت",
+                            callback_data="admin_done_practice_paginate_list_0",
+                        ),
+                        InlineKeyboardButton("exit!", callback_data="back_home"),
+                    ]
+                ]
+            )
+
+        await callback_query.message.reply_video(
+            video=user_practice.file_link,
+            caption=f"📌 عنوان سوال: {user_practice.title}\n"
+            f"🔖 متن سوال: {user_practice.practice_caption}\n"
+            f"👤 کاربر: {user_practice.username}\n"
+            f"◾️ نوع کاربر: {user_practice.user_type_name}\n"
+            f"◾️ شماره کاربر: {user_practice.phone_number}\n"
+            f"◾️ کپشن کاربر:\n {user_practice.user_caption}\n"
+            f"◾️ وضعیت تحلیل سخنرانی: {capt}",
+            reply_markup=markup,
+        )
+
+        if user_practice.teacher_caption:
+            if user_practice.teacher_voice_link:
+                await callback_query.message.reply_voice(
+                    voice=user_practice.teacher_voice_link,
+                    caption="تحلیل سخنرانی",
+                )
+            if user_practice.teacher_video_link:
+                await callback_query.message.reply_video(
+                    video=user_practice.teacher_video_link,
+                    caption="تحلیل سخنرانی",
+                )
 
 
 class Users:
@@ -1850,13 +2035,14 @@ class Notifiaction:
 
 
 def register_admin_handlers(app):
-    app.on_message(filters.regex("my settings") & filters.user(ADMINS_LIST_ID))(
-        admin_my_settings
-    )
+    # app.on_message(filters.regex("my settings") & filters.user(ADMINS_LIST_ID))(
+    #     admin_my_settings
+    # )
 
     ActivePractice(app)
     AllPractice(app)
     NONEPractice(app)
+    DonePractice(app)
     Users(app)
     Teachers(app)
     Practice(app)

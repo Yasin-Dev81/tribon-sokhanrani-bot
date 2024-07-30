@@ -1,6 +1,6 @@
 from pyrogram import filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ForceReply
-from sqlalchemy import func
+from sqlalchemy import func, delete
 import asyncio
 import datetime
 import re
@@ -1250,44 +1250,31 @@ class DonePractice:
 
         await callback_query.message.delete()
 
-        capt = "تحلیل سخنرانی نشده!"
-        x = "تخصیص معلم"
-        if user_practice.techer_id:
-            x = "عوض کردن معلم"
+        capt = (
+            "تحلیل سخنرانی شده.\n"
+            f"◾️ تحلیل سخنرانی: {user_practice.teacher_caption}"
+        )
         markup = InlineKeyboardMarkup(
             [
                 [
-                    # fix
                     InlineKeyboardButton(
-                        x,
-                        callback_data=f"admin_none_practice_user_practice_teacher_selection_list_{user_practice_id}",
-                    )
+                        "🗑 حذف تکلیف",
+                        callback_data=f"admin_all_practice_user_practice_confirm_rm_{user_practice_id}",
+                    ),
+                    InlineKeyboardButton(
+                        "🗑 حذف تحلیل",
+                        callback_data=f"admin_all_practice_user_practice_confirm_rm_teacher_caption_{user_practice_id}",
+                    ),
                 ],
                 [
                     InlineKeyboardButton(
                         "🔙 بازگشت",
-                        callback_data="admin_done_practice_paginate_list_0",
+                        callback_data=f"admin_done_practice_user_practice_list_{user_practice.practice_id}_0",
                     ),
                     InlineKeyboardButton("exit!", callback_data="back_home"),
                 ],
             ]
         )
-        if user_practice.teacher_caption:
-            capt = (
-                "تحلیل سخنرانی شده.\n"
-                f"◾️ تحلیل سخنرانی: {user_practice.teacher_caption}"
-            )
-            markup = InlineKeyboardMarkup(
-                [
-                    [
-                        InlineKeyboardButton(
-                            "🔙 بازگشت",
-                            callback_data="admin_done_practice_paginate_list_0",
-                        ),
-                        InlineKeyboardButton("exit!", callback_data="back_home"),
-                    ]
-                ]
-            )
 
         await callback_query.message.reply_video(
             video=user_practice.file_link,

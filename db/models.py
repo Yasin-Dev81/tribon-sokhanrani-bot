@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, BigInteger
 
 # from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 
 from db.base import Base
 # Base = declarative_base()
@@ -49,7 +49,11 @@ class Practice(Base):
     start_date = Column(DateTime)
     user_type_id = Column(Integer, ForeignKey("user_type.id"))
 
-    user_type = relationship("UserType", foreign_keys="Practice.user_type_id")
+    user_type = relationship(
+        UserType,
+        backref=backref("UserType", cascade="all,delete"),
+        foreign_keys="Practice.user_type_id",
+    )
 
     def __repr__(self):
         return self.title
@@ -58,17 +62,27 @@ class Practice(Base):
 class UserPractice(Base):
     __tablename__ = "user_practice"
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("user.id"), primary_key=True)
+    user_id = Column(Integer, ForeignKey("user.id"))
     user_caption = Column(Text, nullable=True)
     file_link = Column(Text, nullable=False)
-    teacher_id = Column(
-        Integer, ForeignKey("teacher.id"), nullable=True, primary_key=True
-    )
-    practice_id = Column(Integer, ForeignKey("practice.id"), primary_key=True)
+    teacher_id = Column(Integer, ForeignKey("teacher.id"), nullable=True)
+    practice_id = Column(Integer, ForeignKey("practice.id"))
     teacher_caption = Column(Text, nullable=True)
     teacher_voice_link = Column(Text, nullable=True)
     teacher_video_link = Column(Text, nullable=True)
 
-    user = relationship("User", foreign_keys="UserPractice.user_id")
-    teacher = relationship("Teacher", foreign_keys="UserPractice.teacher_id")
-    practice = relationship("Practice", foreign_keys="UserPractice.practice_id")
+    user = relationship(
+        User,
+        backref=backref("User", cascade="all,delete"),
+        foreign_keys="UserPractice.user_id",
+    )
+    teacher = relationship(
+        Teacher,
+        backref=backref("Teacher", cascade="save-update"),
+        foreign_keys="UserPractice.teacher_id",
+    )
+    practice = relationship(
+        Practice,
+        backref=backref("Practice", cascade="all,delete"),
+        foreign_keys="UserPractice.practice_id",
+    )

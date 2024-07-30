@@ -20,3 +20,5 @@ coverage.xml
 .hypothesis
 venv
 var
+
+db.png

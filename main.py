@@ -1,4 +1,5 @@
 from pyrogram import Client
+import uvloop
 
 from bot import (
     register_start_handlers,
@@ -9,6 +10,10 @@ from bot import (
     register_report_handlers,
 )
 from config import TELL_CONFIG, BOT_TOKEN, API_ID, API_HASH
+
+
+# speed up
+uvloop.install()
 
 
 if API_ID and API_HASH and BOT_TOKEN:

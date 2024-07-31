@@ -25,6 +25,7 @@ def is_teacher(filter, client, update):
 
 class Report:
     current_time = datetime.datetime.now()
+    emojies = ["🥇", "🥈", "🥉"]
 
     @property
     def users(self):
@@ -94,8 +95,9 @@ class Report:
         )
 
         top_user_capt = ""
-        for i, user in enumerate(top_users):
-            top_user_capt += f"{i+1}. <i>{user.name}</i> | <code>{user.assignments_delivered}</code>\n"
+        # for i, user in enumerate(top_users):
+        for emj, user in zip(self.emojies, top_users):
+            top_user_capt += f"  {emj} <i>{user.name}</i> | <code>{user.assignments_delivered}</code>\n"
         return top_user_capt
 
     @property
@@ -118,8 +120,9 @@ class Report:
         )
 
         top_teacher_capt = ""
-        for i, teacher in enumerate(top_teachers):
-            top_teacher_capt += f"{i+1}. <i>{teacher.name}</i> | <code>{teacher.assignments_reviewed}</code>\n"
+        # for i, teacher in enumerate(top_teachers):
+        for emj, teacher in zip(self.emojies, top_teachers):
+            top_teacher_capt += f"  {emj} <i>{teacher.name}</i> | <code>{teacher.assignments_reviewed}</code>\n"
         return top_teacher_capt
 
 

@@ -386,22 +386,22 @@ class BasePractice:
 
     @staticmethod
     async def send_user_correction_notification(client, user_practice_id):
-        user_chat_id = (
-            db.session.query(db.UserModel.chat_id)
+        user_info = (
+            db.session.query(db.UserModel.chat_id, db.UserPracticeModel.practice_id)
             .join(db.UserPracticeModel, db.UserModel.id == db.UserPracticeModel.user_id)
             .filter(db.UserPracticeModel.id == user_practice_id)
             .scalar()
         )
 
         await client.send_message(
-            chat_id=user_chat_id,
+            chat_id=user_info.chat_id,
             text=f"تمرین {user_practice_id} شما تحلیل سخنرانی شد.",
             reply_markup=InlineKeyboardMarkup(
                 [
                     [
                         InlineKeyboardButton(
                             "مشاهده",
-                            callback_data=f"user_active_practice_select_{user_practice_id}",
+                            callback_data=f"user_answered_practice_select_{user_info.practice_id}",
                         )
                     ]
                 ]
@@ -1008,22 +1008,22 @@ class NONEPractice:
 
     @staticmethod
     async def send_user_correction_notification(client, user_practice_id):
-        user_chat_id = (
-            db.session.query(db.UserModel.chat_id)
+        user_info = (
+            db.session.query(db.UserModel.chat_id, db.UserPracticeModel.practice_id)
             .join(db.UserPracticeModel, db.UserModel.id == db.UserPracticeModel.user_id)
             .filter(db.UserPracticeModel.id == user_practice_id)
             .scalar()
         )
 
         await client.send_message(
-            chat_id=user_chat_id,
+            chat_id=user_info.chat_id,
             text=f"تمرین {user_practice_id} شما تحلیل سخنرانی شد.",
             reply_markup=InlineKeyboardMarkup(
                 [
                     [
                         InlineKeyboardButton(
                             "مشاهده",
-                            callback_data=f"user_active_practice_select_{user_practice_id}",
+                            callback_data=f"user_answered_practice_select_{user_info.practice_id}",
                         )
                     ]
                 ]

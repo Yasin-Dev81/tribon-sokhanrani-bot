@@ -78,7 +78,9 @@ class ActivePractice:
         current_time = datetime.datetime.now()
         practices = (
             db.session.query(db.PracticeModel.id, db.PracticeModel.title)
-            .join(db.UserModel, db.UserModel.user_type_id == db.PracticeModel.user_type_id)
+            .join(
+                db.UserModel, db.UserModel.user_type_id == db.PracticeModel.user_type_id
+            )
             .filter(
                 db.UserModel.tell_id == user_tell_id,
                 db.PracticeModel.start_date <= current_time,
@@ -160,6 +162,7 @@ class ActivePractice:
                 db.UserPracticeModel.teacher_caption,
                 db.UserPracticeModel.id,
                 db.UserPracticeModel.teacher_voice_link,
+                db.UserPracticeModel.teacher_video_link,
                 and_(
                     db.PracticeModel.start_date <= datetime.datetime.now(),
                     db.PracticeModel.end_date >= datetime.datetime.now(),
@@ -198,7 +201,7 @@ class ActivePractice:
             if user_practice.teacher_caption:
                 capt = (
                     "تحلیل سخنرانی شده.\n"
-                    f"بازخورد استاد: {user_practice.teacher_caption}"
+                    f"◾️بازخورد استاد: {user_practice.teacher_caption}"
                 )
                 markup = []
             else:
@@ -231,10 +234,18 @@ class ActivePractice:
                 f"\n📊 وضعیت تمرین: {capt}",
                 reply_markup=InlineKeyboardMarkup(markup),
             )
-            if user_practice.teacher_voice_link:
-                await callback_query.message.reply_voice(
-                    voice=user_practice.teacher_voice_link, caption="ویس استاد"
-                )
+
+            if user_practice.teacher_caption:
+                if user_practice.teacher_voice_link:
+                    await callback_query.message.reply_voice(
+                        voice=user_practice.teacher_voice_link,
+                        caption="تحلیل سخنرانی",
+                    )
+                if user_practice.teacher_video_link:
+                    await callback_query.message.reply_video(
+                        video=user_practice.teacher_video_link,
+                        caption="تحلیل سخنرانی",
+                    )
         else:
             if not practice.status:
                 markup = []
@@ -523,6 +534,7 @@ class AnsweredPractice:
                 db.UserPracticeModel.teacher_caption,
                 db.UserPracticeModel.id,
                 db.UserPracticeModel.teacher_voice_link,
+                db.UserPracticeModel.teacher_video_link,
                 db.PracticeModel.start_date,
                 db.PracticeModel.end_date,
                 and_(
@@ -563,7 +575,7 @@ class AnsweredPractice:
             if user_practice.teacher_caption:
                 capt = (
                     "تحلیل سخنرانی شده.\n"
-                    f"بازخورد استاد: {user_practice.teacher_caption}"
+                    f"◾️ بازخورد استاد: {user_practice.teacher_caption}"
                 )
                 markup = []
             else:
@@ -596,10 +608,17 @@ class AnsweredPractice:
                 f"\n📊 وضعیت تمرین: {capt}",
                 reply_markup=InlineKeyboardMarkup(markup),
             )
-            if user_practice.teacher_voice_link:
-                await callback_query.message.reply_voice(
-                    voice=user_practice.teacher_voice_link, caption="ویس استاد"
-                )
+            if user_practice.teacher_caption:
+                if user_practice.teacher_voice_link:
+                    await callback_query.message.reply_voice(
+                        voice=user_practice.teacher_voice_link,
+                        caption="تحلیل سخنرانی",
+                    )
+                if user_practice.teacher_video_link:
+                    await callback_query.message.reply_video(
+                        video=user_practice.teacher_video_link,
+                        caption="تحلیل سخنرانی",
+                    )
         else:
             if not practice.status:
                 markup = []

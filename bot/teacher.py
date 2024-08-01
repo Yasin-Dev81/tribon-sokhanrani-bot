@@ -16,9 +16,9 @@ import db
 
 
 def is_teacher(filter, client, update):
-    with db.session as db_session:
+    with db.get_session() as session:
         return (
-            db_session.query(db.TeacherModel)
+            session.query(db.TeacherModel)
             .filter_by(tell_id=update.from_user.id)
             .first()
             is not None
@@ -37,7 +37,9 @@ class BasePractice:
             & filters.create(is_teacher)
         )(self.select)
         self.app.on_callback_query(
-            filters.regex(rf"teacher_{self.type}_practice_user_practice_list_(\d+)_(\d+)")
+            filters.regex(
+                rf"teacher_{self.type}_practice_user_practice_list_(\d+)_(\d+)"
+            )
             & filters.create(is_teacher)
         )(self.user_practice_list)
         self.app.on_callback_query(
@@ -101,34 +103,36 @@ class BasePractice:
 
     @staticmethod
     def report_practice(pk):
-        total_count_subquery = (
-            db.session.query(func.count(db.UserPracticeModel.id))
-            .filter(db.UserPracticeModel.practice_id == pk)
-            .scalar_subquery()
-        )
-        teacher_caption_count_subquery = (
-            db.session.query(func.count(db.UserPracticeModel.id))
-            .filter(
-                db.UserPracticeModel.practice_id == pk,
-                db.UserPracticeModel.teacher_caption.isnot(None),
+        with db.get_session() as session:
+            total_count_subquery = (
+                session.query(func.count(db.UserPracticeModel.id))
+                .filter(db.UserPracticeModel.practice_id == pk)
+                .scalar_subquery()
             )
-            .scalar_subquery()
-        )
-        practice = (
-            db.session.query(
-                db.PracticeModel.title,
-                db.PracticeModel.caption,
-                total_count_subquery.label("total_count"),
-                teacher_caption_count_subquery.label("teacher_caption_count"),
-                db.UserTypeModel.name.label("user_type_name"),
+            teacher_caption_count_subquery = (
+                session.query(func.count(db.UserPracticeModel.id))
+                .filter(
+                    db.UserPracticeModel.practice_id == pk,
+                    db.UserPracticeModel.teacher_caption.isnot(None),
+                )
+                .scalar_subquery()
             )
-            .join(
-                db.UserTypeModel, db.PracticeModel.user_type_id == db.UserTypeModel.id
+            practice = (
+                session.query(
+                    db.PracticeModel.title,
+                    db.PracticeModel.caption,
+                    total_count_subquery.label("total_count"),
+                    teacher_caption_count_subquery.label("teacher_caption_count"),
+                    db.UserTypeModel.name.label("user_type_name"),
+                )
+                .join(
+                    db.UserTypeModel,
+                    db.PracticeModel.user_type_id == db.UserTypeModel.id,
+                )
+                .filter(db.PracticeModel.id == pk)
+                .first()
             )
-            .filter(db.PracticeModel.id == pk)
-            .first()
-        )
-        return practice
+            return practice
 
     async def select(self, client, callback_query):
         practice_id = int(callback_query.data.split("_")[-1])
@@ -164,28 +168,31 @@ class BasePractice:
 
     @staticmethod
     def user_practices(pk, teacher_tell_id):
-        query = (
-            db.session.query(
-                db.UserPracticeModel.id.label("id"),
-                db.UserModel.name.label("title"),
-                db.UserPracticeModel.teacher_caption,
-                db.UserTypeModel.name.label("user_type_name"),
+        with db.get_session() as session:
+            query = (
+                session.query(
+                    db.UserPracticeModel.id.label("id"),
+                    db.UserModel.name.label("title"),
+                    db.UserPracticeModel.teacher_caption,
+                    db.UserTypeModel.name.label("user_type_name"),
+                )
+                .join(
+                    db.PracticeModel,
+                    db.UserPracticeModel.practice_id == db.PracticeModel.id,
+                )
+                .join(
+                    db.UserTypeModel,
+                    db.UserTypeModel.id == db.PracticeModel.user_type_id,
+                )
+                .join(db.UserModel, db.UserPracticeModel.user_id == db.UserModel.id)
+                .join(
+                    db.TeacherModel,
+                    db.TeacherModel.id == db.UserPracticeModel.teacher_id,
+                )
+                .filter(db.UserPracticeModel.practice_id == pk)
+                .filter(db.TeacherModel.tell_id == teacher_tell_id)
             )
-            .join(
-                db.PracticeModel,
-                db.UserPracticeModel.practice_id == db.PracticeModel.id,
-            )
-            .join(
-                db.UserTypeModel, db.UserTypeModel.id == db.PracticeModel.user_type_id
-            )
-            .join(db.UserModel, db.UserPracticeModel.user_id == db.UserModel.id)
-            .join(
-                db.TeacherModel, db.TeacherModel.id == db.UserPracticeModel.teacher_id
-            )
-            .filter(db.UserPracticeModel.practice_id == pk)
-            .filter(db.TeacherModel.tell_id == teacher_tell_id)
-        )
-        return query.all()
+            return query.all()
 
     async def user_practice_list(self, client, callback_query):
         match = re.search(
@@ -237,27 +244,28 @@ class BasePractice:
 
     @staticmethod
     def user_practice(pk):
-        query = (
-            db.session.query(
-                db.UserPracticeModel.id.label("id"),
-                db.UserModel.name.label("username"),
-                db.UserPracticeModel.file_link.label("file_link"),
-                db.UserPracticeModel.user_caption.label("user_caption"),
-                db.UserPracticeModel.teacher_caption.label("teacher_caption"),
-                db.PracticeModel.title.label("title"),
-                db.PracticeModel.caption.label("practice_caption"),
-                db.UserPracticeModel.practice_id.label("practice_id"),
-                db.UserPracticeModel.teacher_video_link,
-                db.UserPracticeModel.teacher_voice_link,
+        with db.get_session() as session:
+            query = (
+                session.query(
+                    db.UserPracticeModel.id.label("id"),
+                    db.UserModel.name.label("username"),
+                    db.UserPracticeModel.file_link.label("file_link"),
+                    db.UserPracticeModel.user_caption.label("user_caption"),
+                    db.UserPracticeModel.teacher_caption.label("teacher_caption"),
+                    db.PracticeModel.title.label("title"),
+                    db.PracticeModel.caption.label("practice_caption"),
+                    db.UserPracticeModel.practice_id.label("practice_id"),
+                    db.UserPracticeModel.teacher_video_link,
+                    db.UserPracticeModel.teacher_voice_link,
+                )
+                .join(
+                    db.PracticeModel,
+                    db.PracticeModel.id == db.UserPracticeModel.practice_id,
+                )
+                .join(db.UserModel, db.UserModel.id == db.UserPracticeModel.user_id)
+                .filter(db.UserPracticeModel.id == pk)
             )
-            .join(
-                db.PracticeModel,
-                db.PracticeModel.id == db.UserPracticeModel.practice_id,
-            )
-            .join(db.UserModel, db.UserModel.id == db.UserPracticeModel.user_id)
-            .filter(db.UserPracticeModel.id == pk)
-        )
-        return query.first()
+            return query.first()
 
     async def user_practice_select(self, client, callback_query):
         user_practice_id = int(callback_query.data.split("_")[-1])
@@ -300,15 +308,34 @@ class BasePractice:
 
         if user_practice.teacher_caption:
             if user_practice.teacher_voice_link:
-                await callback_query.message.reply_voice(voice=user_practice.teacher_voice_link, caption="تحلیل سخنرانی")
+                await callback_query.message.reply_voice(
+                    voice=user_practice.teacher_voice_link, caption="تحلیل سخنرانی"
+                )
             if user_practice.teacher_video_link:
-                await callback_query.message.reply_video(video=user_practice.teacher_video_link, caption="تحلیل سخنرانی")
-
+                await callback_query.message.reply_video(
+                    video=user_practice.teacher_video_link, caption="تحلیل سخنرانی"
+                )
 
     async def correction(self, client, callback_query):
         user_practice_id = int(callback_query.data.split("_")[-1])
 
-        await callback_query.message.delete()
+        # await callback_query.message.delete()
+        await callback_query.message.edit_reply_markup(
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "🔙 بازگشت",
+                            callback_data=f"teacher_{self.type}_practice_user_practice_select_{user_practice_id}",
+                        ),
+                        InlineKeyboardButton(
+                            "exit!",
+                            callback_data="back_home",
+                        )
+                    ]
+                ]
+            ),
+        )
 
         await callback_query.message.reply_text(
             "نوع تحلیل را انتخاب کنید:",
@@ -386,55 +413,62 @@ class BasePractice:
 
     @staticmethod
     async def send_user_correction_notification(client, user_practice_id):
-        user_info = (
-            db.session.query(db.UserModel.chat_id, db.UserPracticeModel.practice_id)
-            .join(db.UserPracticeModel, db.UserModel.id == db.UserPracticeModel.user_id)
-            .filter(db.UserPracticeModel.id == user_practice_id)
-            .scalar()
-        )
+        with db.get_session() as session:
+            user_info = (
+                session.query(db.UserModel.chat_id, db.UserPracticeModel.practice_id)
+                .join(
+                    db.UserPracticeModel,
+                    db.UserModel.id == db.UserPracticeModel.user_id,
+                )
+                .filter(db.UserPracticeModel.id == user_practice_id)
+                .scalar()
+            )
 
-        await client.send_message(
-            chat_id=user_info.chat_id,
-            text=f"تمرین {user_practice_id} شما تحلیل سخنرانی شد.",
-            reply_markup=InlineKeyboardMarkup(
-                [
+            await client.send_message(
+                chat_id=user_info.chat_id,
+                text=f"تمرین {user_practice_id} شما تحلیل سخنرانی شد.",
+                reply_markup=InlineKeyboardMarkup(
                     [
-                        InlineKeyboardButton(
-                            "مشاهده",
-                            callback_data=f"user_answered_practice_select_{user_info.practice_id}",
-                        )
+                        [
+                            InlineKeyboardButton(
+                                "مشاهده",
+                                callback_data=f"user_answered_practice_select_{user_info.practice_id}",
+                            )
+                        ]
                     ]
-                ]
-            ),
-        )
+                ),
+            )
 
     @staticmethod
     def set_teacher_caption_db(pk, teahcer_caption):
-        user_practice = db.session.query(db.UserPracticeModel).get(pk)
-        if user_practice:
-            user_practice.teacher_caption = teahcer_caption
-            db.session.commit()
-            return True
+        with db.get_session() as session:
+            user_practice = session.query(db.UserPracticeModel).get(pk)
+            if user_practice:
+                user_practice.teacher_caption = teahcer_caption
+                session.commit()
+                return True
         return False
 
     @staticmethod
     def set_teacher_voice_db(pk, file_link):
-        user_practice = db.session.query(db.UserPracticeModel).get(pk)
-        if user_practice:
-            user_practice.teacher_voice_link = file_link
-            user_practice.teacher_caption = "تحلیل صوتی است!"
-            db.session.commit()
-            return True
+        with db.get_session() as session:
+            user_practice = session.query(db.UserPracticeModel).get(pk)
+            if user_practice:
+                user_practice.teacher_voice_link = file_link
+                user_practice.teacher_caption = "تحلیل صوتی است!"
+                session.commit()
+                return True
         return False
 
     @staticmethod
     def set_teacher_video_db(pk, file_link):
-        user_practice = db.session.query(db.UserPracticeModel).get(pk)
-        if user_practice:
-            user_practice.teacher_video_link = file_link
-            user_practice.teacher_caption = "تحلیل ویدیوئی است!"
-            db.session.commit()
-            return True
+        with db.get_session() as session:
+            user_practice = session.query(db.UserPracticeModel).get(pk)
+            if user_practice:
+                user_practice.teacher_video_link = file_link
+                user_practice.teacher_caption = "تحلیل ویدیوئی است!"
+                session.commit()
+                return True
         return False
 
     async def correction_text(self, client, message):
@@ -537,15 +571,15 @@ class BasePractice:
 
     @staticmethod
     def clear_correction_db(pk):
-        with db.session as db_session:
-            user_practice = db_session.query(db.UserPracticeModel).get(pk)
+        with db.get_session() as session:
+            user_practice = session.query(db.UserPracticeModel).get(pk)
             if user_practice:
                 user_practice.teacher_caption = None
                 user_practice.teacher_voice_link = None
                 user_practice.teacher_video_link = None
-                db_session.commit()
+                session.commit()
                 return True
-            return False
+        return False
 
     async def confirm(self, client, callback_query):
         match = re.search(
@@ -593,15 +627,16 @@ class ActivePractice(BasePractice):
     @property
     def practices(self):
         current_time = datetime.datetime.now()
-        practices = (
-            db.session.query(db.PracticeModel.id, db.PracticeModel.title)
-            .filter(
-                db.PracticeModel.start_date <= current_time,
-                db.PracticeModel.end_date >= current_time,
+        with db.get_session() as session:
+            practices = (
+                session.query(db.PracticeModel.id, db.PracticeModel.title)
+                .filter(
+                    db.PracticeModel.start_date <= current_time,
+                    db.PracticeModel.end_date >= current_time,
+                )
+                .all()
             )
-            .all()
-        )
-        return practices
+            return practices
 
     async def list(self, client, message):
         if not self.practices:
@@ -665,8 +700,9 @@ class AllPractice(BasePractice):
 
     @property
     def practices(self):
-        practices = db.session.query(db.PracticeModel.id, db.PracticeModel.title).all()
-        return practices
+        with db.get_session() as session:
+            practices = session.query(db.PracticeModel.id, db.PracticeModel.title).all()
+            return practices
 
     async def list(self, client, message):
         if not self.practices:
@@ -784,29 +820,31 @@ class NONEPractice:
 
     @staticmethod
     def user_practices(tell_id):
-        query = (
-            db.session.query(
-                db.UserPracticeModel.id,
-                (db.UserModel.name + " - " + db.PracticeModel.title).label("title"),
+        with db.get_session() as session:
+            query = (
+                session.query(
+                    db.UserPracticeModel.id,
+                    (db.UserModel.name + " | " + db.PracticeModel.title).label("title"),
+                )
+                .join(
+                    db.PracticeModel,
+                    db.UserPracticeModel.practice_id == db.PracticeModel.id,
+                    isouter=True,
+                )
+                .join(
+                    db.UserModel,
+                    db.UserPracticeModel.user_id == db.UserModel.id,
+                    isouter=True,
+                )
+                .join(
+                    db.TeacherModel,
+                    db.UserPracticeModel.teacher_id == db.TeacherModel.id,
+                )
+                .filter(db.TeacherModel.tell_id == tell_id)
+                .filter(db.UserPracticeModel.teacher_caption.is_(None))
             )
-            .join(
-                db.PracticeModel,
-                db.UserPracticeModel.practice_id == db.PracticeModel.id,
-                isouter=True,
-            )
-            .join(
-                db.UserModel,
-                db.UserPracticeModel.user_id == db.UserModel.id,
-                isouter=True,
-            )
-            .join(
-                db.TeacherModel, db.UserPracticeModel.teacher_id == db.TeacherModel.id
-            )
-            .filter(db.TeacherModel.tell_id == tell_id)
-            .filter(db.UserPracticeModel.teacher_caption.is_(None))
-        )
 
-        return query.all()
+            return query.all()
 
     async def list(self, client, message):
         user_practices = self.user_practices(message.from_user.id)
@@ -859,28 +897,29 @@ class NONEPractice:
 
     @staticmethod
     def user_practice(pk):
-        query = (
-            db.session.query(
-                db.UserPracticeModel.id.label("id"),
-                db.UserModel.name.label("username"),
-                db.UserPracticeModel.file_link.label("file_link"),
-                db.UserPracticeModel.user_caption.label("user_caption"),
-                db.UserPracticeModel.teacher_caption.label("teacher_caption"),
-                db.PracticeModel.title.label("title"),
-                db.PracticeModel.caption.label("practice_caption"),
-                db.UserPracticeModel.practice_id.label("practice_id"),
-                db.UserPracticeModel.teacher_id.label("techer_id"),
-                db.UserPracticeModel.teacher_video_link,
-                db.UserPracticeModel.teacher_video_link,
+        with db.get_session() as session:
+            query = (
+                session.query(
+                    db.UserPracticeModel.id.label("id"),
+                    db.UserModel.name.label("username"),
+                    db.UserPracticeModel.file_link.label("file_link"),
+                    db.UserPracticeModel.user_caption.label("user_caption"),
+                    db.UserPracticeModel.teacher_caption.label("teacher_caption"),
+                    db.PracticeModel.title.label("title"),
+                    db.PracticeModel.caption.label("practice_caption"),
+                    db.UserPracticeModel.practice_id.label("practice_id"),
+                    db.UserPracticeModel.teacher_id.label("techer_id"),
+                    db.UserPracticeModel.teacher_video_link,
+                    db.UserPracticeModel.teacher_video_link,
+                )
+                .join(
+                    db.PracticeModel,
+                    db.PracticeModel.id == db.UserPracticeModel.practice_id,
+                )
+                .join(db.UserModel, db.UserModel.id == db.UserPracticeModel.user_id)
+                .filter(db.UserPracticeModel.id == pk)
             )
-            .join(
-                db.PracticeModel,
-                db.PracticeModel.id == db.UserPracticeModel.practice_id,
-            )
-            .join(db.UserModel, db.UserModel.id == db.UserPracticeModel.user_id)
-            .filter(db.UserPracticeModel.id == pk)
-        )
-        return query.first()
+            return query.first()
 
     async def user_practice_select(self, client, callback_query):
         user_practice_id = int(callback_query.data.split("_")[-1])
@@ -923,14 +962,34 @@ class NONEPractice:
 
         if user_practice.teacher_caption:
             if user_practice.teacher_voice_link:
-                await callback_query.message.reply_voice(voice=user_practice.teacher_voice_link, caption="تحلیل سخنرانی")
+                await callback_query.message.reply_voice(
+                    voice=user_practice.teacher_voice_link, caption="تحلیل سخنرانی"
+                )
             if user_practice.teacher_video_link:
-                await callback_query.message.reply_video(video=user_practice.teacher_video_link, caption="تحلیل سخنرانی")
+                await callback_query.message.reply_video(
+                    video=user_practice.teacher_video_link, caption="تحلیل سخنرانی"
+                )
 
     async def correction(self, client, callback_query):
         user_practice_id = int(callback_query.data.split("_")[-1])
 
-        await callback_query.message.delete()
+        # await callback_query.message.delete()
+        await callback_query.message.edit_reply_markup(
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "🔙 بازگشت",
+                            callback_data=f"teacher_none_practice_user_practice_select_{user_practice_id}",
+                        ),
+                        InlineKeyboardButton(
+                            "exit!",
+                            callback_data="back_home",
+                        )
+                    ]
+                ]
+            ),
+        )
 
         await callback_query.message.reply_text(
             "نوع تحلیل را انتخاب کنید:",
@@ -972,7 +1031,7 @@ class NONEPractice:
             user_practice_id = int(match.group(2))
 
             await callback_query.message.reply_text(
-                f"لطفا تحیلی <b>{types_list[type]}</b> را ریپلی کنید.",
+                f"لطفا تحلیل <b>{types_list[type]}</b> را ریپلی کنید.",
                 reply_markup=InlineKeyboardMarkup(
                     [
                         [
@@ -1008,55 +1067,62 @@ class NONEPractice:
 
     @staticmethod
     async def send_user_correction_notification(client, user_practice_id):
-        user_info = (
-            db.session.query(db.UserModel.chat_id, db.UserPracticeModel.practice_id)
-            .join(db.UserPracticeModel, db.UserModel.id == db.UserPracticeModel.user_id)
-            .filter(db.UserPracticeModel.id == user_practice_id)
-            .scalar()
-        )
+        with db.get_session() as session:
+            user_info = (
+                session.query(db.UserModel.chat_id, db.UserPracticeModel.practice_id)
+                .join(
+                    db.UserPracticeModel,
+                    db.UserModel.id == db.UserPracticeModel.user_id,
+                )
+                .filter(db.UserPracticeModel.id == user_practice_id)
+                .scalar()
+            )
 
-        await client.send_message(
-            chat_id=user_info.chat_id,
-            text=f"تمرین {user_practice_id} شما تحلیل سخنرانی شد.",
-            reply_markup=InlineKeyboardMarkup(
-                [
+            await client.send_message(
+                chat_id=str(user_info.chat_id),
+                text=f"تمرین {user_practice_id} شما تحلیل سخنرانی شد.",
+                reply_markup=InlineKeyboardMarkup(
                     [
-                        InlineKeyboardButton(
-                            "مشاهده",
-                            callback_data=f"user_answered_practice_select_{user_info.practice_id}",
-                        )
+                        [
+                            InlineKeyboardButton(
+                                "مشاهده",
+                                callback_data=f"user_answered_practice_select_{user_info.practice_id}",
+                            )
+                        ]
                     ]
-                ]
-            ),
-        )
+                ),
+            )
 
     @staticmethod
     def set_teacher_caption_db(pk, teahcer_caption):
-        user_practice = db.session.query(db.UserPracticeModel).get(pk)
-        if user_practice:
-            user_practice.teacher_caption = teahcer_caption
-            db.session.commit()
-            return True
+        with db.get_session() as session:
+            user_practice = session.query(db.UserPracticeModel).get(pk)
+            if user_practice:
+                user_practice.teacher_caption = teahcer_caption
+                session.commit()
+                return True
         return False
 
     @staticmethod
     def set_teacher_voice_db(pk, file_link):
-        user_practice = db.session.query(db.UserPracticeModel).get(pk)
-        if user_practice:
-            user_practice.teacher_voice_link = file_link
-            user_practice.teacher_caption = "تحلیل صوتی است!"
-            db.session.commit()
-            return True
+        with db.get_session() as session:
+            user_practice = session.query(db.UserPracticeModel).get(pk)
+            if user_practice:
+                user_practice.teacher_voice_link = file_link
+                user_practice.teacher_caption = "تحلیل صوتی است!"
+                session.commit()
+                return True
         return False
 
     @staticmethod
     def set_teacher_video_db(pk, file_link):
-        user_practice = db.session.query(db.UserPracticeModel).get(pk)
-        if user_practice:
-            user_practice.teacher_video_link = file_link
-            user_practice.teacher_caption = "تحلیل ویدیوئی است!"
-            db.session.commit()
-            return True
+        with db.get_session() as session:
+            user_practice = session.query(db.UserPracticeModel).get(pk)
+            if user_practice:
+                user_practice.teacher_video_link = file_link
+                user_practice.teacher_caption = "تحلیل ویدیوئی است!"
+                session.commit()
+                return True
         return False
 
     async def correction_text(self, client, message):
@@ -1159,13 +1225,13 @@ class NONEPractice:
 
     @staticmethod
     def clear_correction_db(pk):
-        with db.session as db_session:
-            user_practice = db_session.query(db.UserPracticeModel).get(pk)
+        with db.get_session() as session:
+            user_practice = session.query(db.UserPracticeModel).get(pk)
             if user_practice:
                 user_practice.teacher_caption = None
                 user_practice.teacher_voice_link = None
                 user_practice.teacher_video_link = None
-                db_session.commit()
+                session.commit()
                 return True
             return False
 
@@ -1198,14 +1264,15 @@ class NONEPractice:
 
 
 async def teacher_my_settings(client, message):
-    teacher = (
-        db.session.query(db.TeacherModel)
-        .filter_by(tell_id=message.from_user.id)
-        .first()
-    )
-    await message.reply(
-        f"You are <b>teacher</b> and your id is <i>{teacher.id}</i>\nName: {teacher.name}"
-    )
+    with db.get_session() as session:
+        teacher = (
+            session.query(db.TeacherModel)
+            .filter_by(tell_id=message.from_user.id)
+            .first()
+        )
+        await message.reply(
+            f"You are <b>teacher</b> and your id is <i>{teacher.id}</i>\nName: {teacher.name}"
+        )
 
 
 def register_teacher_handlers(app):

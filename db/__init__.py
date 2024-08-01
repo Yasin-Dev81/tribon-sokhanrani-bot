@@ -1,4 +1,4 @@
-from .base import Base, session, engine
+from .base import get_session
 from .models import (
     User as UserModel,
     Teacher as TeacherModel,
@@ -9,7 +9,7 @@ from .models import (
 
 
 __all__ = (
-    "session",
+    "get_session",
     "UserModel",
     "TeacherModel",
     "PracticeModel",

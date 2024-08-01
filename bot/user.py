@@ -8,7 +8,6 @@ from sqlalchemy import and_
 import datetime
 import asyncio
 
-
 from .pagination import get_paginated_keyboard
 from .home import send_home_message_user
 from config import ADMINS_LIST_ID, GROUP_CHAT_ID
@@ -16,10 +15,11 @@ import db
 
 
 def is_user(_, __, update):
-    return (
-        db.session.query(db.UserModel).filter_by(tell_id=update.from_user.id).first()
-        is not None
-    )
+    with db.get_session() as session:
+        return (
+            session.query(db.UserModel).filter_by(tell_id=update.from_user.id).first()
+            is not None
+        )
 
 
 class ActivePractice:
@@ -76,19 +76,20 @@ class ActivePractice:
 
     def practices(self, user_tell_id):
         current_time = datetime.datetime.now()
-        practices = (
-            db.session.query(db.PracticeModel.id, db.PracticeModel.title)
-            .join(
-                db.UserModel, db.UserModel.user_type_id == db.PracticeModel.user_type_id
+        with db.get_session() as session:
+            practices = (
+                session.query(db.PracticeModel.id, db.PracticeModel.title)
+                .join(
+                    db.UserModel, db.UserModel.user_type_id == db.PracticeModel.user_type_id
+                )
+                .filter(
+                    db.UserModel.tell_id == user_tell_id,
+                    db.PracticeModel.start_date <= current_time,
+                    db.PracticeModel.end_date >= current_time,
+                )
+                .all()
             )
-            .filter(
-                db.UserModel.tell_id == user_tell_id,
-                db.PracticeModel.start_date <= current_time,
-                db.PracticeModel.end_date >= current_time,
-            )
-            .all()
-        )
-        return practices
+            return practices
 
     async def list(self, client, message):
         practices = self.practices(message.from_user.id)
@@ -115,7 +116,11 @@ class ActivePractice:
             return
 
         if page == 0:
-            await callback_query.message.delete()
+            try:
+                await callback_query.message.delete()
+            except Exception:
+                pass
+
             await callback_query.message.reply_text(
                 "تمارین فعال:",
                 reply_markup=get_paginated_keyboard(
@@ -138,45 +143,47 @@ class ActivePractice:
 
     @staticmethod
     def report_practice(pk):
-        practice = (
-            db.session.query(
-                db.PracticeModel.title,
-                db.PracticeModel.caption,
-                and_(
-                    db.PracticeModel.start_date <= datetime.datetime.now(),
-                    db.PracticeModel.end_date >= datetime.datetime.now(),
-                ).label("status"),
+        with db.get_session() as session:
+            practice = (
+                session.query(
+                    db.PracticeModel.title,
+                    db.PracticeModel.caption,
+                    and_(
+                        db.PracticeModel.start_date <= datetime.datetime.now(),
+                        db.PracticeModel.end_date >= datetime.datetime.now(),
+                    ).label("status"),
+                )
+                .filter(db.PracticeModel.id == pk)
+                .first()
             )
-            .filter(db.PracticeModel.id == pk)
-            .first()
-        )
-        return practice
+            return practice
 
     @staticmethod
     def report_user_practice(practice_id, tell_id):
-        query = (
-            db.session.query(
-                db.PracticeModel.title,
-                db.PracticeModel.caption,
-                db.UserPracticeModel.user_caption,
-                db.UserPracticeModel.teacher_caption,
-                db.UserPracticeModel.id,
-                db.UserPracticeModel.teacher_voice_link,
-                db.UserPracticeModel.teacher_video_link,
-                and_(
-                    db.PracticeModel.start_date <= datetime.datetime.now(),
-                    db.PracticeModel.end_date >= datetime.datetime.now(),
-                ).label("status"),
+        with db.get_session() as session:
+            query = (
+                session.query(
+                    db.PracticeModel.title,
+                    db.PracticeModel.caption,
+                    db.UserPracticeModel.user_caption,
+                    db.UserPracticeModel.teacher_caption,
+                    db.UserPracticeModel.id,
+                    db.UserPracticeModel.teacher_voice_link,
+                    db.UserPracticeModel.teacher_video_link,
+                    and_(
+                        db.PracticeModel.start_date <= datetime.datetime.now(),
+                        db.PracticeModel.end_date >= datetime.datetime.now(),
+                    ).label("status"),
+                )
+                .join(
+                    db.PracticeModel,
+                    db.PracticeModel.id == db.UserPracticeModel.practice_id,
+                )
+                .join(db.UserModel, db.UserModel.id == db.UserPracticeModel.user_id)
+                .filter(db.UserPracticeModel.practice_id == practice_id)
+                .filter(db.UserModel.tell_id == tell_id)
             )
-            .join(
-                db.PracticeModel,
-                db.PracticeModel.id == db.UserPracticeModel.practice_id,
-            )
-            .join(db.UserModel, db.UserModel.id == db.UserPracticeModel.user_id)
-            .filter(db.UserPracticeModel.practice_id == practice_id)
-            .filter(db.UserModel.tell_id == tell_id)
-        )
-        return query.first()
+            return query.first()
 
     async def select(self, client, callback_query):
         practice_id = int(callback_query.data.split("_")[-1])
@@ -186,7 +193,10 @@ class ActivePractice:
         if not user_practice:
             practice = self.report_practice(pk=practice_id)
 
-        await callback_query.message.delete()
+        try:
+            await callback_query.message.delete()
+        except Exception:
+            pass
 
         capt = "تحویل داده نشده!"
         markup = [
@@ -259,7 +269,10 @@ class ActivePractice:
     async def answer(self, client, callback_query):
         practice_id = int(callback_query.data.split("_")[-1])
 
-        await callback_query.message.delete()
+        try:
+            await callback_query.message.delete()
+        except Exception:
+            pass
 
         await callback_query.message.reply_text(
             "ویدیوی خود را ریپلی کنید.",
@@ -292,15 +305,16 @@ class ActivePractice:
 
     @staticmethod
     def upload_db(user_id, file_link, practice_id, user_caption=None):
-        new_user_practice = db.UserPracticeModel(
-            user_id=user_id,
-            file_link=file_link,
-            practice_id=practice_id,
-            user_caption=user_caption,
-        )
-        db.session.add(new_user_practice)
-        db.session.commit()
-        return new_user_practice.id
+        with db.get_session() as session:
+            new_user_practice = db.UserPracticeModel(
+                user_id=user_id,
+                file_link=file_link,
+                practice_id=practice_id,
+                user_caption=user_caption,
+            )
+            session.add(new_user_practice)
+            session.commit()
+            return new_user_practice.id
 
     async def upload(self, client, message):
         practice_id = int(message.reply_to_message.text.split("\n")[0])
@@ -323,22 +337,27 @@ class ActivePractice:
             chat_id=GROUP_CHAT_ID, video=media_id, caption=capt
         )
         telegram_link = forwarded_message.video.file_id
-        user_id = (
-            db.session.query(db.UserModel)
-            .filter_by(tell_id=message.from_user.id)
-            .first()
-            .id
-        )
+        with db.get_session() as session:
+            user_id = (
+                session.query(db.UserModel)
+                .filter_by(tell_id=message.from_user.id)
+                .first()
+                .id
+            )
 
-        # Store the Telegram link in the database
-        user_practice_id = self.upload_db(
-            user_id=user_id,
-            practice_id=practice_id,
-            file_link=telegram_link,
-            user_caption=message.caption,
-        )
+            # Store the Telegram link in the database
+            user_practice_id = self.upload_db(
+                user_id=user_id,
+                practice_id=practice_id,
+                file_link=telegram_link,
+                user_caption=message.caption,
+            )
 
-        await message.reply_to_message.delete()
+        try:
+            await message.reply_to_message.delete()
+        except Exception:
+            pass
+
         await message.reply_text("تمرین با موفقیت ثبت شد.")
         await send_home_message_user(message)
 
@@ -364,13 +383,14 @@ class ActivePractice:
 
     @staticmethod
     def update_db(pk, file_link, user_caption=None):
-        user_practice = db.session.query(db.UserPracticeModel).get(pk)
-        if user_practice:
-            user_practice.file_link = file_link
-            if user_caption is not None:
-                user_practice.user_caption = user_caption
-            db.session.commit()
-        return pk
+        with db.get_session() as session:
+            user_practice = session.query(db.UserPracticeModel).get(pk)
+            if user_practice:
+                user_practice.file_link = file_link
+                if user_caption is not None:
+                    user_practice.user_caption = user_caption
+                session.commit()
+            return pk
 
     async def reupload(self, client, message):
         user_practice_id = int(message.reply_to_message.text.split("\n")[0])
@@ -455,17 +475,18 @@ class AnsweredPractice:
         )
 
     def practices(self, user_tell_id):
-        query = (
-            db.session.query(db.PracticeModel.id, db.PracticeModel.title)
-            .join(
-                db.UserPracticeModel,
-                db.PracticeModel.id == db.UserPracticeModel.practice_id,
+        with db.get_session() as session:
+            query = (
+                session.query(db.PracticeModel.id, db.PracticeModel.title)
+                .join(
+                    db.UserPracticeModel,
+                    db.PracticeModel.id == db.UserPracticeModel.practice_id,
+                )
+                .join(db.UserModel, db.UserModel.id == db.UserPracticeModel.user_id)
+                .filter(db.UserModel.tell_id == user_tell_id)
             )
-            .join(db.UserModel, db.UserModel.id == db.UserPracticeModel.user_id)
-            .filter(db.UserModel.tell_id == user_tell_id)
-        )
 
-        return query.all()
+            return query.all()
 
     async def list(self, client, message):
         practices = self.practices(message.from_user.id)
@@ -515,42 +536,44 @@ class AnsweredPractice:
 
     @staticmethod
     def report_practice(pk):
-        practice = db.session.query(
-            db.PracticeModel,
-            and_(
-                db.PracticeModel.start_date <= datetime.datetime.now(),
-                db.PracticeModel.end_date >= datetime.datetime.now(),
-            ).label("status"),
-        ).get(pk)
-        return practice
-
-    @staticmethod
-    def report_user_practice(practice_id, tell_id):
-        query = (
-            db.session.query(
-                db.PracticeModel.title,
-                db.PracticeModel.caption,
-                db.UserPracticeModel.user_caption,
-                db.UserPracticeModel.teacher_caption,
-                db.UserPracticeModel.id,
-                db.UserPracticeModel.teacher_voice_link,
-                db.UserPracticeModel.teacher_video_link,
-                db.PracticeModel.start_date,
-                db.PracticeModel.end_date,
+        with db.get_session() as session:
+            practice = session.query(
+                db.PracticeModel,
                 and_(
                     db.PracticeModel.start_date <= datetime.datetime.now(),
                     db.PracticeModel.end_date >= datetime.datetime.now(),
                 ).label("status"),
+            ).get(pk)
+            return practice
+
+    @staticmethod
+    def report_user_practice(practice_id, tell_id):
+        with db.get_session() as session:
+            query = (
+                session.query(
+                    db.PracticeModel.title,
+                    db.PracticeModel.caption,
+                    db.UserPracticeModel.user_caption,
+                    db.UserPracticeModel.teacher_caption,
+                    db.UserPracticeModel.id,
+                    db.UserPracticeModel.teacher_voice_link,
+                    db.UserPracticeModel.teacher_video_link,
+                    db.PracticeModel.start_date,
+                    db.PracticeModel.end_date,
+                    and_(
+                        db.PracticeModel.start_date <= datetime.datetime.now(),
+                        db.PracticeModel.end_date >= datetime.datetime.now(),
+                    ).label("status"),
+                )
+                .join(
+                    db.PracticeModel,
+                    db.PracticeModel.id == db.UserPracticeModel.practice_id,
+                )
+                .join(db.UserModel, db.UserModel.id == db.UserPracticeModel.user_id)
+                .filter(db.UserPracticeModel.practice_id == practice_id)
+                .filter(db.UserModel.tell_id == tell_id)
             )
-            .join(
-                db.PracticeModel,
-                db.PracticeModel.id == db.UserPracticeModel.practice_id,
-            )
-            .join(db.UserModel, db.UserModel.id == db.UserPracticeModel.user_id)
-            .filter(db.UserPracticeModel.practice_id == practice_id)
-            .filter(db.UserModel.tell_id == tell_id)
-        )
-        return query.first()
+            return query.first()
 
     async def select(self, client, callback_query):
         practice_id = int(callback_query.data.split("_")[-1])
@@ -665,15 +688,16 @@ class AnsweredPractice:
 
     @staticmethod
     def upload_db(user_id, file_link, practice_id, user_caption=None):
-        new_user_practice = db.UserPracticeModel(
-            user_id=user_id,
-            file_link=file_link,
-            practice_id=practice_id,
-            user_caption=user_caption,
-        )
-        db.session.add(new_user_practice)
-        db.session.commit()
-        return new_user_practice.id
+        with db.get_session() as session:
+            new_user_practice = db.UserPracticeModel(
+                user_id=user_id,
+                file_link=file_link,
+                practice_id=practice_id,
+                user_caption=user_caption,
+            )
+            session.add(new_user_practice)
+            session.commit()
+            return new_user_practice.id
 
     async def upload(self, client, message):
         practice_id = int(message.reply_to_message.text.split("\n")[0])
@@ -697,20 +721,21 @@ class AnsweredPractice:
         )
         telegram_link = forwarded_message.video.file_id
         # user_id = db.User().read_with_tell_id(tell_id=message.from_user.id).id
-        user_id = (
-            db.session.query(db.UserModel)
-            .filter_by(tell_id=message.from_user.id)
-            .first()
-            .id
-        )
+        with db.get_session() as session:
+            user_id = (
+                session.query(db.UserModel)
+                .filter_by(tell_id=message.from_user.id)
+                .first()
+                .id
+            )
 
-        # Store the Telegram link in the database
-        user_practice_id = self.upload_db(
-            user_id=user_id,
-            practice_id=practice_id,
-            file_link=telegram_link,
-            user_caption=message.caption,
-        )
+            # Store the Telegram link in the database
+            user_practice_id = self.upload_db(
+                user_id=user_id,
+                practice_id=practice_id,
+                file_link=telegram_link,
+                user_caption=message.caption,
+            )
 
         await message.reply_to_message.delete()
         await message.reply_text("تمرین با موفقیت ثبت شد.")
@@ -738,13 +763,14 @@ class AnsweredPractice:
 
     @staticmethod
     def update_db(pk, file_link, user_caption=None):
-        user_practice = db.session.query(db.UserPracticeModel).get(pk)
-        if user_practice:
-            user_practice.file_link = file_link
-            if user_caption is not None:
-                user_practice.user_caption = user_caption
-            db.session.commit()
-        return pk
+        with db.get_session() as session:
+            user_practice = session.query(db.UserPracticeModel).get(pk)
+            if user_practice:
+                user_practice.file_link = file_link
+                if user_caption is not None:
+                    user_practice.user_caption = user_caption
+                session.commit()
+            return pk
 
     async def reupload(self, client, message):
         user_practice_id = int(message.reply_to_message.text.split("\n")[0])
@@ -782,12 +808,13 @@ class AnsweredPractice:
 
 
 async def user_settings(client, message):
-    user = (
-        db.session.query(db.UserModel).filter_by(tell_id=message.from_user.id).first()
-    )
-    await message.reply(
-        f"You are <b>user</b> and your id is <i>{user.id}</i>\nName: {user.name}"
-    )
+    with db.get_session() as session:
+        user = (
+            session.query(db.UserModel).filter_by(tell_id=message.from_user.id).first()
+        )
+        await message.reply(
+            f"You are <b>user</b> and your id is <i>{user.id}</i>\nName: {user.name}"
+        )
 
 
 def register_user_handlers(app):

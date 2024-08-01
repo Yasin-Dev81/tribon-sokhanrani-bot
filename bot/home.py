@@ -50,18 +50,22 @@ async def send_home_message_user(message):
 async def back_home(client, callback_query):
     # Acknowledge the callback query
     await callback_query.answer()
-    await callback_query.message.delete()
+    try:
+        await callback_query.message.delete()
+    except Exception:
+        pass
 
-    if callback_query.from_user.id in ADMINS_LIST_ID:
-        await send_home_message_admin(callback_query.message)
-    elif (
-        db.session.query(db.TeacherModel)
-        .filter_by(tell_id=callback_query.from_user.id)
-        .first()
-    ):
-        await send_home_message_teacher(callback_query.message)
-    else:
-        await send_home_message_user(callback_query.message)
+    with db.get_session() as session:
+        if callback_query.from_user.id in ADMINS_LIST_ID:
+            await send_home_message_admin(callback_query.message)
+        elif (
+            session.query(db.TeacherModel)
+            .filter_by(tell_id=callback_query.from_user.id)
+            .first()
+        ):
+            await send_home_message_teacher(callback_query.message)
+        else:
+            await send_home_message_user(callback_query.message)
 
 
 def register_home_handlers(app):

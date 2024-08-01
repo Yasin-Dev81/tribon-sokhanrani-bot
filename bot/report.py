@@ -7,16 +7,17 @@ import db
 
 
 def is_user(_, __, update):
-    return (
-        db.session.query(db.UserModel).filter_by(tell_id=update.from_user.id).first()
-        is not None
-    )
+    with db.get_session() as session:
+        return (
+            session.query(db.UserModel).filter_by(tell_id=update.from_user.id).first()
+            is not None
+        )
 
 
 def is_teacher(filter, client, update):
-    with db.session as db_session:
+    with db.get_session() as session:
         return (
-            db_session.query(db.TeacherModel)
+            session.query(db.TeacherModel)
             .filter_by(tell_id=update.from_user.id)
             .first()
             is not None
@@ -27,16 +28,20 @@ class Report:
     current_time = datetime.datetime.now()
     emojies = ["🥇", "🥈", "🥉"]
 
+    def __init__(self) -> None:
+        with db.get_session() as session:
+            self.session = session
+
     @property
     def users(self):
-        return db.session.query(
+        return self.session.query(
             func.count(db.UserModel.id).label("users_count"),
             func.count(db.UserModel.chat_id.distinct()).label("active_users_count"),
         ).first()
 
     @property
     def teahcers(self):
-        return db.session.query(
+        return self.session.query(
             func.count(db.TeacherModel.id).label("teachers_count"),
             func.count(db.TeacherModel.chat_id.distinct()).label(
                 "active_teachers_count"
@@ -45,7 +50,7 @@ class Report:
 
     @property
     def practices(self):
-        return db.session.query(
+        return self.session.query(
             func.count(db.PracticeModel.id).label("practice_count"),
             func.sum(
                 case(
@@ -63,7 +68,7 @@ class Report:
 
     @property
     def user_practices(self):
-        return db.session.query(
+        return self.session.query(
             func.count(db.UserPracticeModel.id).label("user_practice_count"),
             func.sum(
                 case((db.UserPracticeModel.teacher_id.is_(None), 1), else_=0)
@@ -82,7 +87,7 @@ class Report:
     @property
     def top_users(self):
         top_users = (
-            db.session.query(
+            self.session.query(
                 db.UserModel.id,
                 db.UserModel.name,
                 func.count(db.UserPracticeModel.id).label("assignments_delivered"),
@@ -103,7 +108,7 @@ class Report:
     @property
     def top_teachers(self):
         top_teachers = (
-            db.session.query(
+            self.session.query(
                 db.TeacherModel.id,
                 db.TeacherModel.name,
                 func.count(db.UserPracticeModel.id).label("assignments_reviewed"),

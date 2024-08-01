@@ -11,26 +11,26 @@ import db
 
 
 def user_update_with_phone_number(phone_number, tell_id, chat_id):
-    user = db.session.query(db.UserModel).filter_by(phone_number=phone_number).first()
-    if user:
-        user.tell_id = tell_id
-        user.chat_id = chat_id
-        # user.name = name
-        db.session.commit()
-        return True
-    else:
-        return False
+    with db.get_session() as session:
+        user = session.query(db.UserModel).filter_by(phone_number=phone_number).first()
+        if user:
+            user.tell_id = tell_id
+            user.chat_id = chat_id
+            # user.name = name
+            session.commit()
+            return True
+    return False
 
 
 def teacher_update_with_phone_number(phone_number, tell_id, chat_id):
-    user = db.session.query(db.TeacherModel).filter_by(phone_number=phone_number).first()
-    if user:
-        user.tell_id = tell_id
-        user.chat_id = chat_id
-        db.session.commit()
-        return True
-    else:
-        return False
+    with db.get_session() as session:
+        user = session.query(db.TeacherModel).filter_by(phone_number=phone_number).first()
+        if user:
+            user.tell_id = tell_id
+            user.chat_id = chat_id
+            session.commit()
+            return True
+    return False
 
 
 async def start(client, message):
@@ -39,32 +39,33 @@ async def start(client, message):
         await send_home_message_admin(message)
         return
 
-    teacher_row = (
-        db.session.query(db.TeacherModel)
-        .filter_by(tell_id=message.from_user.id)
-        .first()
-    )
-    # print(teacher_row)
-    if teacher_row:
-        await send_home_message_teacher(message)
-        return
+    with db.get_session() as session:
+        teacher_row = (
+            session.query(db.TeacherModel)
+            .filter_by(tell_id=message.from_user.id)
+            .first()
+        )
+        # print(teacher_row)
+        if teacher_row:
+            await send_home_message_teacher(message)
+            return
 
-    user_row = (
-        db.session.query(db.UserModel).filter_by(tell_id=message.from_user.id).first()
-    )
-    if user_row:
-        await send_home_message_user(message)
-        return
+        user_row = (
+            session.query(db.UserModel).filter_by(tell_id=message.from_user.id).first()
+        )
+        if user_row:
+            await send_home_message_user(message)
+            return
 
-    # Create a reply keyboard markup with a button to request the user's phone number
-    reply_markup = ReplyKeyboardMarkup(
-        [[KeyboardButton("Send your phone number", request_contact=True)]],
-        resize_keyboard=True,
-        one_time_keyboard=True,
-    )
-    await message.reply_text(
-        "Please share your phone number with me.", reply_markup=reply_markup
-    )
+        # Create a reply keyboard markup with a button to request the user's phone number
+        reply_markup = ReplyKeyboardMarkup(
+            [[KeyboardButton("Send your phone number", request_contact=True)]],
+            resize_keyboard=True,
+            one_time_keyboard=True,
+        )
+        await message.reply_text(
+            "Please share your phone number with me.", reply_markup=reply_markup
+        )
 
 
 async def contact(client, message):

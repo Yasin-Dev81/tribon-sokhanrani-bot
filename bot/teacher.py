@@ -1281,7 +1281,11 @@ async def teacher_my_settings(client, message):
             .first()
         )
         await message.reply(
-            f"You are <b>teacher</b> and your id is <i>{teacher.id}</i>\nName: {teacher.name}"
+            "ℹ️ user-level: <b>teacher</b>\n"
+            f"🆔 teacher-id: <i>{teacher.id}</i>\n"
+            f"👤 teacher-name: <code>{teacher.name}</code>\n"
+            f"◾️ teacher-tell-id: <i>{teacher.tell_id}</i>\n"
+            f"📞 teacher-phone-number: {teacher.phone_number}"
         )
 
 

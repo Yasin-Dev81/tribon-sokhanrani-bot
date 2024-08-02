@@ -166,6 +166,7 @@ class ActivePractice:
                 session.query(
                     db.PracticeModel.title,
                     db.PracticeModel.caption,
+                    db.UserPracticeModel.file_link,
                     db.UserPracticeModel.user_caption,
                     db.UserPracticeModel.teacher_caption,
                     db.UserPracticeModel.id,
@@ -212,7 +213,7 @@ class ActivePractice:
             if user_practice.teacher_caption:
                 capt = (
                     "تحلیل سخنرانی شده.\n"
-                    f"◾️بازخورد استاد: {user_practice.teacher_caption}"
+                    f"◾️ بازخورد استاد: {user_practice.teacher_caption}"
                 )
                 markup = []
             else:
@@ -240,9 +241,10 @@ class ActivePractice:
         )
 
         if user_practice:
-            await callback_query.message.reply_text(
-                f"📌 عنوان: {user_practice.title}\n🔖 متن سوال: {user_practice.caption}\n----"
-                f"\n📊 وضعیت تمرین: {capt}",
+            await callback_query.message.reply_video(
+                video=user_practice.file_link,
+                caption=f"📌 عنوان: {user_practice.title}\n🔖 متن سوال: {user_practice.caption}\n----"
+                f"\n📊 وضعیت تکلیف: {capt}",
                 reply_markup=InlineKeyboardMarkup(markup),
             )
 
@@ -280,12 +282,6 @@ class ActivePractice:
         except Exception:
             pass
 
-        # await callback_query.message.reply_text(
-        #     "ویدیوی خود را ریپلی کنید.",
-        #     reply_markup=InlineKeyboardMarkup(
-        #         [[InlineKeyboardButton("exit!", callback_data="back_home")]]
-        #     ),
-        # )
         await callback_query.message.reply_text(
             f"{practice_id}\n"
             "👈 <b>ابتدا به این پیام ریپلای (پاسخ) بزنید سپس ویدئوی خود را ارسال کنید.</b>\n\n"
@@ -573,6 +569,7 @@ class AnsweredPractice:
                 session.query(
                     db.PracticeModel.title,
                     db.PracticeModel.caption,
+                    db.UserPracticeModel.file_link,
                     db.UserPracticeModel.user_caption,
                     db.UserPracticeModel.teacher_caption,
                     db.UserPracticeModel.id,
@@ -646,9 +643,10 @@ class AnsweredPractice:
         )
 
         if user_practice:
-            await callback_query.message.reply_text(
-                f"📌 عنوان: {user_practice.title}\n🔖 متن سوال: {user_practice.caption}\n----"
-                f"\n📊 وضعیت تمرین: {capt}",
+            await callback_query.message.reply_video(
+                video=user_practice.file_link,
+                caption=f"📌 عنوان: {user_practice.title}\n🔖 متن سوال: {user_practice.caption}\n----"
+                f"\n📊 وضعیت تکلیف: {capt}",
                 reply_markup=InlineKeyboardMarkup(markup),
             )
             if user_practice.teacher_caption:
@@ -855,7 +853,11 @@ async def user_settings(client, message):
             session.query(db.UserModel).filter_by(tell_id=message.from_user.id).first()
         )
         await message.reply(
-            f"You are <b>user</b> and your id is <i>{user.id}</i>\nName: {user.name}"
+            "ℹ️ user-level: <b>user</b>\n"
+            f"🆔 user-id: <i>{user.id}</i>\n"
+            f"👤 user-name: <code>{user.name}</code>\n"
+            f"◾️ user-tell-id: <i>{user.tell_id}</i>\n"
+            f"📞 user-phone-number: {user.phone_number}"
         )
 
 

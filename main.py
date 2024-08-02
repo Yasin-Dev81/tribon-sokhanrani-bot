@@ -1,5 +1,6 @@
 from pyrogram import Client
 import uvloop
+import logging
 
 from bot import (
     register_start_handlers,
@@ -11,6 +12,8 @@ from bot import (
 )
 from config import TELL_CONFIG, BOT_TOKEN, API_ID, API_HASH
 
+
+logging.basicConfig(level=logging.WARN)
 
 # speed up
 uvloop.install()

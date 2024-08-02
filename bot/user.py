@@ -63,14 +63,14 @@ class ActivePractice:
     @staticmethod
     def is_new_answer_msg(filter, client, update):
         return (
-            "Just send answer as a reply to this message"
+            "ابتدا به این پیام ریپلای (پاسخ) بزنید سپس ویدئوی خود را ارسال کنید."
             in update.reply_to_message.text
         )
 
     @staticmethod
     def is_reanswer_msg(filter, client, update):
         return (
-            "Just send x answer as a reply to this message"
+            "ابتدا به این پیام ریپلای (پاسخ) بزنید سپس ویدئوی اصلاحی خود را ارسال کنید."
             in update.reply_to_message.text
         )
 
@@ -80,7 +80,8 @@ class ActivePractice:
             practices = (
                 session.query(db.PracticeModel.id, db.PracticeModel.title)
                 .join(
-                    db.UserModel, db.UserModel.user_type_id == db.PracticeModel.user_type_id
+                    db.UserModel,
+                    db.UserModel.user_type_id == db.PracticeModel.user_type_id,
                 )
                 .filter(
                     db.UserModel.tell_id == user_tell_id,
@@ -270,18 +271,26 @@ class ActivePractice:
         practice_id = int(callback_query.data.split("_")[-1])
 
         try:
-            await callback_query.message.delete()
+            # await callback_query.message.delete()
+            await callback_query.message.edit_reply_markup(
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("exit!", callback_data="back_home")]]
+                ),
+            )
         except Exception:
             pass
 
+        # await callback_query.message.reply_text(
+        #     "ویدیوی خود را ریپلی کنید.",
+        #     reply_markup=InlineKeyboardMarkup(
+        #         [[InlineKeyboardButton("exit!", callback_data="back_home")]]
+        #     ),
+        # )
         await callback_query.message.reply_text(
-            "ویدیوی خود را ریپلی کنید.",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("exit!", callback_data="back_home")]]
-            ),
-        )
-        await callback_query.message.reply_text(
-            f"{practice_id}\n" "<b>Just send answer as a reply to this message</b>",
+            f"{practice_id}\n"
+            "👈 <b>ابتدا به این پیام ریپلای (پاسخ) بزنید سپس ویدئوی خود را ارسال کنید.</b>\n\n"
+            "⚠️ توجه: در صورتی که به این پیام ریپلای نزنید، ارسال تکلیف شما ناموفق خواهد بود!\n"
+            "همچنین ویدیوی ارسالی باید کمتر از 50 مگابایت باشد!",
             reply_markup=ForceReply(selective=True),
         )
 
@@ -368,16 +377,27 @@ class ActivePractice:
     async def reanswer(self, client, callback_query):
         practice_id = int(callback_query.data.split("_")[-1])
 
-        await callback_query.message.delete()
+        try:
+            # await callback_query.message.delete()
+            await callback_query.message.edit_reply_markup(
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("exit!", callback_data="back_home")]]
+                ),
+            )
+        except Exception:
+            pass
 
+        # await callback_query.message.reply_text(
+        #     "پیام خود را ریپلی کنید.",
+        #     reply_markup=InlineKeyboardMarkup(
+        #         [[InlineKeyboardButton("exit!", callback_data="back_home")]]
+        #     ),
+        # )
         await callback_query.message.reply_text(
-            "پیام خود را ریپلی کنید.",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("exit!", callback_data="back_home")]]
-            ),
-        )
-        await callback_query.message.reply_text(
-            f"{practice_id}\n" "<b>Just send x answer as a reply to this message</b>",
+            f"{practice_id}\n"
+            "👈 <b>ابتدا به این پیام ریپلای (پاسخ) بزنید سپس ویدئوی اصلاحی خود را ارسال کنید.</b>\n\n"
+            "⚠️ توجه: در صورتی که به این پیام ریپلای نزنید، ارسال تکلیف شما ناموفق خواهد بود!\n"
+            "همچنین ویدیوی ارسالی باید کمتر از 50 مگابایت باشد!",
             reply_markup=ForceReply(selective=True),
         )
 
@@ -655,16 +675,27 @@ class AnsweredPractice:
     async def answer(self, client, callback_query):
         practice_id = int(callback_query.data.split("_")[-1])
 
-        await callback_query.message.delete()
+        try:
+            # await callback_query.message.delete()
+            await callback_query.message.edit_reply_markup(
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("exit!", callback_data="back_home")]]
+                ),
+            )
+        except Exception:
+            pass
 
+        # await callback_query.message.reply_text(
+        #     "ویدیوی خود را ریپلی کنید.",
+        #     reply_markup=InlineKeyboardMarkup(
+        #         [[InlineKeyboardButton("exit!", callback_data="back_home")]]
+        #     ),
+        # )
         await callback_query.message.reply_text(
-            "ویدیوی خود را ریپلی کنید.",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("exit!", callback_data="back_home")]]
-            ),
-        )
-        await callback_query.message.reply_text(
-            f"{practice_id}\n" "<b>Just send answer as a reply to this message</b>",
+            f"{practice_id}\n"
+            "👈 <b>ابتدا به این پیام ریپلای (پاسخ) بزنید سپس ویدئوی خود را ارسال کنید.</b>\n\n"
+            "⚠️ توجه: در صورتی که به این پیام ریپلای نزنید، ارسال تکلیف شما ناموفق خواهد بود!\n"
+            "همچنین ویدیوی ارسالی باید کمتر از 50 مگابایت باشد!",
             reply_markup=ForceReply(selective=True),
         )
 
@@ -748,16 +779,27 @@ class AnsweredPractice:
     async def reanswer(self, client, callback_query):
         practice_id = int(callback_query.data.split("_")[-1])
 
-        await callback_query.message.delete()
+        try:
+            # await callback_query.message.delete()
+            await callback_query.message.edit_reply_markup(
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("exit!", callback_data="back_home")]]
+                ),
+            )
+        except Exception:
+            pass
 
+        # await callback_query.message.reply_text(
+        #     "پیام خود را ریپلی کنید.",
+        #     reply_markup=InlineKeyboardMarkup(
+        #         [[InlineKeyboardButton("exit!", callback_data="back_home")]]
+        #     ),
+        # )
         await callback_query.message.reply_text(
-            "پیام خود را ریپلی کنید.",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("exit!", callback_data="back_home")]]
-            ),
-        )
-        await callback_query.message.reply_text(
-            f"{practice_id}\n" "<b>Just send x answer as a reply to this message</b>",
+            f"{practice_id}\n"
+            "👈 <b>ابتدا به این پیام ریپلای (پاسخ) بزنید سپس ویدئوی اصلاحی خود را ارسال کنید.</b>\n\n"
+            "⚠️ توجه: در صورتی که به این پیام ریپلای نزنید، ارسال تکلیف شما ناموفق خواهد بود!\n"
+            "همچنین ویدیوی ارسالی باید کمتر از 50 مگابایت باشد!",
             reply_markup=ForceReply(selective=True),
         )
 

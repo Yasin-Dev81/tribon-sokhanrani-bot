@@ -1375,7 +1375,7 @@ class Users:
     @staticmethod
     def is_update_user(filter, client, update):
         return (
-            "Just send teacher name as a reply to this message"
+            "Just send user name as a reply to this message"
             in update.reply_to_message.text
         )
 
@@ -1593,15 +1593,15 @@ class Users:
                 await message.reply_to_message.delete()
 
                 await message.reply_text(
-                    f"معلم {message.text} با موفقیت اضافه شد."
-                    "حال نام معلم را ارسال کنید.",
+                    f"یوزر {message.text} با موفقیت اضافه شد."
+                    "حال نام یوزر را ارسال کنید.",
                     reply_markup=InlineKeyboardMarkup(
                         [[InlineKeyboardButton("exit!", callback_data="back_home")]]
                     ),
                 )
                 await message.reply_text(
                     f"{user_id}\n"
-                    "<b>Just send teacher name as a reply to this message</b>",
+                    "<b>Just send user name as a reply to this message</b>",
                     reply_markup=ForceReply(selective=True),
                 )
 

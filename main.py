@@ -24,9 +24,7 @@ if API_ID and API_HASH and BOT_TOKEN:
         bot_token=BOT_TOKEN,
     )
 else:
-    app = Client(
-        TELL_CONFIG
-    )
+    app = Client(TELL_CONFIG)
 
 
 # Register handlers

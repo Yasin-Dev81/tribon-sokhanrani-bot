@@ -1635,8 +1635,9 @@ class Users:
             user_id = match.group(2)
             # print(user_id, user_type, db.UserType[user_type].value)
             if self.update_user_type(user_id, user_type_id):
+                await callback_query.answer("کاربر با موفقیت اضافه شد.", show_alert=True)
                 await callback_query.message.delete()
-                await callback_query.message.reply_text("کاربر با موفقیت اضافه شد.")
+                # await callback_query.message.reply_text("کاربر با موفقیت اضافه شد.")
                 await send_home_message_admin(callback_query.message)
             else:
                 await callback_query.message.reply_text("error!")

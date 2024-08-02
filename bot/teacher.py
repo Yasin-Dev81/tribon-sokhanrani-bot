@@ -85,19 +85,19 @@ class BasePractice:
 
     def is_new_correction_msg(filter, client, update):
         return (
-            "Just send correction as a reply to this message"
+            "ابتدا به این پیام ریپلای (پاسخ) بزنید سپس تحلیل متنی خود را ارسال کنید."
             in update.reply_to_message.text
         )
 
     def is_voice_correction_msg(filter, client, update):
         return (
-            "Just send voice correction as a reply to this message"
+            "ابتدا به این پیام ریپلای (پاسخ) بزنید سپس تحلیل صوتی خود را ارسال کنید."
             in update.reply_to_message.text
         )
 
     def is_video_correction_msg(filter, client, update):
         return (
-            "Just send video correction as a reply to this message"
+            "ابتدا به این پیام ریپلای (پاسخ) بزنید سپس تحلیل ویدیویی خود را ارسال کنید."
             in update.reply_to_message.text
         )
 
@@ -369,43 +369,47 @@ class BasePractice:
             rf"teacher_{self.type}_practice_user_practice_correction_type_(\d+)_(\d+)",
             callback_query.data,
         )
-        types_list = ["متنی", "صوتی", "ویدیوئی"]
+        # types_list = ["متنی", "صوتی", "ویدیوئی"]
         if match:
             await callback_query.message.delete()
 
             type = int(match.group(1))
             user_practice_id = int(match.group(2))
 
-            await callback_query.message.reply_text(
-                f"لطفا تحیلی <b>{types_list[type]}</b> را ریپلی کنید.",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "exit!",
-                                callback_data="back_home",
-                            )
-                        ]
-                    ]
-                ),
-            )
+            # await callback_query.message.reply_text(
+            #     f"لطفا تحیلی <b>{types_list[type]}</b> را ریپلی کنید.",
+            #     reply_markup=InlineKeyboardMarkup(
+            #         [
+            #             [
+            #                 InlineKeyboardButton(
+            #                     "exit!",
+            #                     callback_data="back_home",
+            #                 )
+            #             ]
+            #         ]
+            #     ),
+            # )
 
             if type == 0:
                 await callback_query.message.reply_text(
                     f"{user_practice_id}\n"
-                    "<b>Just send n correction as a reply to this message</b>",
+                    "👈 <b>ابتدا به این پیام ریپلای (پاسخ) بزنید سپس تحلیل متنی خود را ارسال کنید.</b>\n\n"
+                    "⚠️ توجه: در صورتی که به این پیام ریپلای نزنید، ارسال تحلیل شما ناموفق خواهد بود!",
                     reply_markup=ForceReply(selective=True),
                 )
             elif type == 1:
                 await callback_query.message.reply_text(
                     f"{user_practice_id}\n"
-                    "<b>Just send n voice correction as a reply to this message</b>",
+                    "👈 <b>ابتدا به این پیام ریپلای (پاسخ) بزنید سپس تحلیل صوتی خود را ارسال کنید.</b>\n\n"
+                    "⚠️ توجه: در صورتی که به این پیام ریپلای نزنید، ارسال تحلیل شما ناموفق خواهد بود!",
                     reply_markup=ForceReply(selective=True),
                 )
             else:
                 await callback_query.message.reply_text(
                     f"{user_practice_id}\n"
-                    f"<b>Just send n video correction as a reply to this message</b>",
+                    f"👈 <b>ابتدا به این پیام ریپلای (پاسخ) بزنید سپس تحلیل ویدیویی خود را ارسال کنید.</b>\n\n"
+                    "⚠️ توجه: در صورتی که به این پیام ریپلای نزنید، ارسال تحلیل شما ناموفق خواهد بود!\n"
+                    "همچنین ویدیوی ارسالی باید کمتر از 50 مگابایت باشد!",
                     reply_markup=ForceReply(selective=True),
                 )
         else:
@@ -421,7 +425,7 @@ class BasePractice:
                     db.UserModel.id == db.UserPracticeModel.user_id,
                 )
                 .filter(db.UserPracticeModel.id == user_practice_id)
-                .scalar()
+                .first()
             )
 
             await client.send_message(
@@ -597,6 +601,7 @@ class BasePractice:
                     await send_home_message_teacher(callback_query.message)
                     return
             else:
+                await callback_query.answer("تحلیل با موفقیت ثبت شد.", show_alert=True)
                 await callback_query.message.delete()
                 await callback_query.message.reply_text("تحلیل با موفقیت ثبت شد.")
                 await send_home_message_teacher(callback_query.message)
@@ -777,24 +782,24 @@ class NONEPractice:
             filters.regex(r"teacher_none_practice_user_practice_correction_(\d+)")
             & filters.create(is_teacher)
         )(self.correction)
-        self.app.on_message(
-            filters.reply
-            & filters.text
-            & filters.create(is_teacher)
-            & filters.create(self.is_new_correction_msg)
-        )(self.correction_text)
-        self.app.on_message(
-            filters.reply
-            & filters.voice
-            & filters.create(is_teacher)
-            & filters.create(self.is_voice_correction_msg)
-        )(self.correction_voice)
-        self.app.on_message(
-            filters.reply
-            & filters.video
-            & filters.create(is_teacher)
-            & filters.create(self.is_video_correction_msg)
-        )(self.correction_video)
+        # self.app.on_message(
+        #     filters.reply
+        #     & filters.text
+        #     & filters.create(is_teacher)
+        #     & filters.create(self.is_new_correction_msg)
+        # )(self.correction_text)
+        # self.app.on_message(
+        #     filters.reply
+        #     & filters.voice
+        #     & filters.create(is_teacher)
+        #     & filters.create(self.is_voice_correction_msg)
+        # )(self.correction_voice)
+        # self.app.on_message(
+        #     filters.reply
+        #     & filters.video
+        #     & filters.create(is_teacher)
+        #     & filters.create(self.is_video_correction_msg)
+        # )(self.correction_video)
         self.app.on_callback_query(
             filters.regex(r"teacher_none_practice_user_practice_confirm_(\d+)_(\d+)")
             & filters.create(is_teacher)
@@ -1023,43 +1028,47 @@ class NONEPractice:
             r"teacher_none_practice_user_practice_correction_type_(\d+)_(\d+)",
             callback_query.data,
         )
-        types_list = ["متنی", "صوتی", "ویدیوئی"]
+        # types_list = ["متنی", "صوتی", "ویدیوئی"]
         if match:
             await callback_query.message.delete()
 
             type = int(match.group(1))
             user_practice_id = int(match.group(2))
 
-            await callback_query.message.reply_text(
-                f"لطفا تحلیل <b>{types_list[type]}</b> را ریپلی کنید.",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "exit!",
-                                callback_data="back_home",
-                            )
-                        ]
-                    ]
-                ),
-            )
+            # await callback_query.message.reply_text(
+            #     f"لطفا تحلیل <b>{types_list[type]}</b> را ریپلی کنید.",
+            #     reply_markup=InlineKeyboardMarkup(
+            #         [
+            #             [
+            #                 InlineKeyboardButton(
+            #                     "exit!",
+            #                     callback_data="back_home",
+            #                 )
+            #             ]
+            #         ]
+            #     ),
+            # )
 
             if type == 0:
                 await callback_query.message.reply_text(
                     f"{user_practice_id}\n"
-                    "<b>Just send n correction as a reply to this message</b>",
+                    "👈 <b>ابتدا به این پیام ریپلای (پاسخ) بزنید سپس تحلیل متنی خود را ارسال کنید.</b>\n\n"
+                    "⚠️ توجه: در صورتی که به این پیام ریپلای نزنید، ارسال تحلیل شما ناموفق خواهد بود!",
                     reply_markup=ForceReply(selective=True),
                 )
             elif type == 1:
                 await callback_query.message.reply_text(
                     f"{user_practice_id}\n"
-                    "<b>Just send n voice correction as a reply to this message</b>",
+                    "👈 <b>ابتدا به این پیام ریپلای (پاسخ) بزنید سپس تحلیل صوتی خود را ارسال کنید.</b>\n\n"
+                    "⚠️ توجه: در صورتی که به این پیام ریپلای نزنید، ارسال تحلیل شما ناموفق خواهد بود!",
                     reply_markup=ForceReply(selective=True),
                 )
             else:
                 await callback_query.message.reply_text(
                     f"{user_practice_id}\n"
-                    f"<b>Just send n video correction as a reply to this message</b>",
+                    f"👈 <b>ابتدا به این پیام ریپلای (پاسخ) بزنید سپس تحلیل ویدیویی خود را ارسال کنید.</b>\n\n"
+                    "⚠️ توجه: در صورتی که به این پیام ریپلای نزنید، ارسال تحلیل شما ناموفق خواهد بود!\n"
+                    "همچنین ویدیوی ارسالی باید کمتر از 50 مگابایت باشد!",
                     reply_markup=ForceReply(selective=True),
                 )
         else:
@@ -1075,7 +1084,7 @@ class NONEPractice:
                     db.UserModel.id == db.UserPracticeModel.user_id,
                 )
                 .filter(db.UserPracticeModel.id == user_practice_id)
-                .scalar()
+                .first()
             )
 
             await client.send_message(
@@ -1251,6 +1260,7 @@ class NONEPractice:
                     await send_home_message_teacher(callback_query.message)
                     return
             else:
+                await callback_query.answer("تحلیل با موفقیت ثبت شد.", show_alert=True)
                 await callback_query.message.delete()
                 await callback_query.message.reply_text("تحلیل با موفقیت ثبت شد.")
                 await send_home_message_teacher(callback_query.message)

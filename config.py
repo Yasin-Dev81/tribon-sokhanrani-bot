@@ -36,3 +36,5 @@ GROUP_CHAT_ID = config("GROUP_CHAT_ID", default=None)
 
 # pagination
 PRACTICES_PER_PAGE = config("PRACTICES_PER_PAGE", cast=int, default=5)
+
+LEARN_URL = config("LEARN_URL", cast=str, default="https://t.me/sokhanrani/1389")

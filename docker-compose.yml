@@ -11,7 +11,7 @@ services:
       # MYSQL_USER: root
       MYSQL_ROOT_PASSWORD: "jojo9900"
     volumes:
-      - ./var/tmp11/mysql:/var/lib/mysql
+      - ./var/tmp/mysql:/var/lib/mysql
     # networks:
     #   - main
     healthcheck:
@@ -32,13 +32,13 @@ services:
 
   # tribon-bot:
   #   container_name: bot
-  #   image: yasindev/ah-score:5.3
+  #   image: yasindev/ah-score:6.3
   #   env_file: .env
-  #   network_mode: host
+  #   # network_mode: host
   #   volumes:
   #     - "./var/tribon:/var/lib/tribon"
-  #   # networks:
-  #   #   - main
+  #   networks:
+  #     - main
   #   depends_on:
   #     - db
 
@@ -55,10 +55,10 @@ services:
     depends_on:
       - db
 
-#     ports:
-#       - "80:80"
-#     networks:
-#       - main
+    # ports:
+    #   - "80:80"
+    # networks:
+    #   - main
 
 # networks:
 #   main:

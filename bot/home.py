@@ -1,13 +1,15 @@
 from pyrogram.types import ReplyKeyboardMarkup
 from pyrogram import filters
 
-from config import ADMINS_LIST_ID, BOT_VERSION
+from config import ADMINS_LIST_ID, BOT_VERSION, LEARN_URL
 import db
 
 
 async def send_home_message_admin(message):
     await message.reply_text(
-        f"Hi, admin! 👋\nwellcome to <b>tribon sokhanrani</b> 🤖 <i>v{BOT_VERSION}</i>",
+        "سلام <b>ادمین</b> عزیز 👋\n"
+        "به ربات سخنرانی تریبون خوش اومدی!\n\n"
+        f"<b>tribon sokhanrani</b> 🤖 <i>v{BOT_VERSION}</i>\n",
         reply_markup=ReplyKeyboardMarkup(
             [
                 ["تعریف تمرین جدید"],
@@ -23,9 +25,11 @@ async def send_home_message_admin(message):
     )
 
 
-async def send_home_message_teacher(message):
+async def send_home_message_teacher(message, teacher_name="معلم"):
     await message.reply_text(
-        f"Hi, teacher! 👋\nwellcome to <b>tribon sokhanrani</b> 🤖 <i>v{BOT_VERSION}</i>",
+        f"سلام <b>{teacher_name}</b> عزیز 👋\n"
+        "به ربات سخنرانی تریبون خوش اومدی!\n\n"
+        f"<b>tribon sokhanrani</b> 🤖 <i>v{BOT_VERSION}</i>",
         reply_markup=ReplyKeyboardMarkup(
             [
                 ["تکالیف نیازمند به تحلیل سخنرانی"],
@@ -37,9 +41,12 @@ async def send_home_message_teacher(message):
     )
 
 
-async def send_home_message_user(message):
+async def send_home_message_user(message, user_name="کاربر"):
     await message.reply_text(
-        f"Hi, user! 👋\nwellcome to <b>tribon sokhanrani</b> 🤖 <i>v{BOT_VERSION}</i>",
+        f"سلام <b>{user_name}</b> عزیز 👋\n"
+        "به ربات سخنرانی تریبون خوش اومدی!\n"
+        f"<b>tribon sokhanrani</b> 🤖 <i>v{BOT_VERSION}</i>\n\n"
+        f"<a href='{LEARN_URL}'>ℹ️ ویدیو آموزشی نحوه ارسال تمرینات</a>",
         reply_markup=ReplyKeyboardMarkup(
             [["تمرین‌های فعال", "تحویل داده شده‌ها"], ["my settings"]],
             resize_keyboard=True,
@@ -56,16 +63,29 @@ async def back_home(client, callback_query):
         pass
 
     with db.get_session() as session:
-        if callback_query.from_user.id in ADMINS_LIST_ID:
+        admin_st = callback_query.from_user.id in ADMINS_LIST_ID
+        if admin_st:
             await send_home_message_admin(callback_query.message)
-        elif (
+            return
+
+        teahcer_st = (
             session.query(db.TeacherModel)
             .filter_by(tell_id=callback_query.from_user.id)
             .first()
-        ):
-            await send_home_message_teacher(callback_query.message)
-        else:
-            await send_home_message_user(callback_query.message)
+        )
+        if teahcer_st:
+            await send_home_message_teacher(callback_query.message, teacher=teahcer_st.name)
+            return
+        user = (
+            session.query(db.UserModel)
+            .filter_by(tell_id=callback_query.from_user.id)
+            .first()
+        )
+        if user:
+            await send_home_message_user(callback_query.message, user.name)
+            return
+
+    await callback_query.answer("error!")
 
 
 def register_home_handlers(app):

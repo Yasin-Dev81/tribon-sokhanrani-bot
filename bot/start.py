@@ -47,24 +47,24 @@ async def start(client, message):
         )
         # print(teacher_row)
         if teacher_row:
-            await send_home_message_teacher(message)
+            await send_home_message_teacher(message, teacher_row.name)
             return
 
         user_row = (
             session.query(db.UserModel).filter_by(tell_id=message.from_user.id).first()
         )
         if user_row:
-            await send_home_message_user(message)
+            await send_home_message_user(message, user_row.name)
             return
 
         # Create a reply keyboard markup with a button to request the user's phone number
         reply_markup = ReplyKeyboardMarkup(
-            [[KeyboardButton("Send your phone number", request_contact=True)]],
+            [[KeyboardButton("به اشتراک گذاشتن شماره من", request_contact=True)]],
             resize_keyboard=True,
             one_time_keyboard=True,
         )
         await message.reply_text(
-            "Please share your phone number with me.", reply_markup=reply_markup
+            "لطفا شماره تلفن خود را به اشتراک بگذارید!", reply_markup=reply_markup
         )
 
 
@@ -73,12 +73,6 @@ async def contact(client, message):
     user_phone_number = message.contact.phone_number
     if "+" not in user_phone_number:
         user_phone_number = "+%s" % user_phone_number
-
-    # name = []
-    # if message.from_user.first_name:
-    #     name.append(message.from_user.first_name)
-    # if message.from_user.last_name:
-    #     name.append(message.from_user.last_name)
 
     # db
     user_status = user_update_with_phone_number(

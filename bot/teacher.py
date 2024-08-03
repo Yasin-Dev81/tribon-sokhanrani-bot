@@ -144,9 +144,7 @@ class BasePractice:
 
         await callback_query.message.reply_text(
             f"📌 عنوان: {practice.title}\n🔖 متن سوال: {practice.caption}\n"
-            f"◾️ تایپ یوزرهای سوال: {practice.user_type_name}\n"
-            f"◾️ تعداد یوزرهایی که پاسخ داده‌اند: {practice.total_count}\n"
-            f"◾️ تعداد پاسخ‌هایی که تحلیل سخنرانی شده‌اند: {practice.teacher_caption_count}",
+            f"◾️ تایپ یوزرهای سوال: {practice.user_type_name}\n",
             reply_markup=InlineKeyboardMarkup(
                 [
                     [
@@ -217,9 +215,7 @@ class BasePractice:
             await callback_query.message.delete()
             await callback_query.message.reply_text(
                 f"📌 عنوان: {practice.title}\n🔖 متن سوال: {practice.caption}\n"
-                f"◾️ تایپ یوزرهای سوال: {practice.user_type_name}\n"
-                f"◾️ تعداد یوزرهایی که پاسخ داده‌اند: {practice.total_count}\n"
-                f"◾️ تعداد پاسخ‌هایی که تحلیل سخنرانی شده‌اند: {practice.teacher_caption_count}",
+                f"◾️ تایپ یوزرهای سوال: {practice.user_type_name}",
                 reply_markup=user_practice_paginated_keyboard(
                     user_practices,
                     0,

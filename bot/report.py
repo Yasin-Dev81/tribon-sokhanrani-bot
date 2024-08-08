@@ -2,7 +2,7 @@ from pyrogram import filters
 from sqlalchemy import func, and_, case, desc
 import datetime
 
-from config import ADMINS_LIST_ID
+from config import ADMINS_LIST_ID, TIME_ZONE
 import db
 
 
@@ -25,7 +25,7 @@ def is_teacher(filter, client, update):
 
 
 class Report:
-    current_time = datetime.datetime.now()
+    current_time = datetime.datetime.now(TIME_ZONE)
     emojies = ["🥇", "🥈", "🥉"]
 
     def __init__(self) -> None:

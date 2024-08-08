@@ -11,7 +11,7 @@ import re
 
 from .pagination import get_paginated_keyboard, user_practice_paginated_keyboard
 from .home import send_home_message_teacher
-from config import GROUP_CHAT_ID
+from config import GROUP_CHAT_ID, TIME_ZONE
 import db
 
 
@@ -627,7 +627,7 @@ class ActivePractice(BasePractice):
 
     @property
     def practices(self):
-        current_time = datetime.datetime.now()
+        current_time = datetime.datetime.now(TIME_ZONE)
         with db.get_session() as session:
             practices = (
                 session.query(db.PracticeModel.id, db.PracticeModel.title)

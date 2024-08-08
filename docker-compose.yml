@@ -30,17 +30,17 @@ services:
       timeout: 5s
       retries: 5
 
-  # tribon-bot:
-  #   container_name: bot
-  #   image: yasindev/ah-score:6.3
-  #   env_file: .env
-  #   # network_mode: host
-  #   volumes:
-  #     - "./var/tribon:/var/lib/tribon"
-  #   networks:
-  #     - main
-  #   depends_on:
-  #     - db
+  tribon-bot:
+    container_name: bot
+    image: yasindev/ah-score:6.8
+    env_file: .env
+    network_mode: host
+    volumes:
+      - "./var/tribon:/var/lib/tribon"
+    # networks:
+    #   - main
+    depends_on:
+      - db
 
   phpmyadmin:
     image: phpmyadmin/phpmyadmin:latest

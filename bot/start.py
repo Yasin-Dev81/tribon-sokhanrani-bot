@@ -18,18 +18,20 @@ def user_update_with_phone_number(phone_number, tell_id, chat_id):
             user.chat_id = chat_id
             # user.name = name
             session.commit()
-            return True
+            return (True, user.name)
     return False
 
 
 def teacher_update_with_phone_number(phone_number, tell_id, chat_id):
     with db.get_session() as session:
-        user = session.query(db.TeacherModel).filter_by(phone_number=phone_number).first()
+        user = (
+            session.query(db.TeacherModel).filter_by(phone_number=phone_number).first()
+        )
         if user:
             user.tell_id = tell_id
             user.chat_id = chat_id
             session.commit()
-            return True
+            return (True, user.name)
     return False
 
 
@@ -58,13 +60,13 @@ async def start(client, message):
             return
 
         # Create a reply keyboard markup with a button to request the user's phone number
-        reply_markup = ReplyKeyboardMarkup(
-            [[KeyboardButton("به اشتراک گذاشتن شماره من", request_contact=True)]],
-            resize_keyboard=True,
-            one_time_keyboard=True,
-        )
         await message.reply_text(
-            "لطفا شماره تلفن خود را به اشتراک بگذارید!", reply_markup=reply_markup
+            "لطفا شماره تلفن خود را به اشتراک بگذارید!",
+            reply_markup=ReplyKeyboardMarkup(
+                [[KeyboardButton("به اشتراک گذاشتن شماره من", request_contact=True)]],
+                resize_keyboard=True,
+                one_time_keyboard=True,
+            ),
         )
 
 
@@ -78,24 +80,26 @@ async def contact(client, message):
     user_status = user_update_with_phone_number(
         phone_number=user_phone_number,
         tell_id=message.from_user.id,
-        chat_id=message.chat.id
+        chat_id=message.chat.id,
     )
     print("----- login user", user_phone_number, user_status)
 
-    if user_status:
-        await send_home_message_user(message)
-    else:
-        teacher_status = teacher_update_with_phone_number(
-            phone_number=user_phone_number,
-            tell_id=message.from_user.id,
-            chat_id=message.chat.id,
-        )
-        print("----- login teacher", user_phone_number, teacher_status)
+    if user_status[0]:
+        await send_home_message_user(message, user_name=user_status[1])
+        return
 
-        if teacher_status:
-            await send_home_message_teacher(message)
-        else:
-            await message.reply_text("No Access, Please send message to admin!")
+    teacher_status = teacher_update_with_phone_number(
+        phone_number=user_phone_number,
+        tell_id=message.from_user.id,
+        chat_id=message.chat.id,
+    )
+    print("----- login teacher", user_phone_number, teacher_status)
+
+    if teacher_status[0]:
+        await send_home_message_teacher(message, teacher_name=teacher_status[1])
+        return
+
+    await message.reply_text("No Access, Please send message to admin!")
 
 
 def register_start_handlers(app):

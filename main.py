@@ -9,6 +9,7 @@ from bot import (
     register_teacher_handlers,
     register_user_handlers,
     register_report_handlers,
+    register_utils_handlers,
 )
 from config import TELL_CONFIG, BOT_TOKEN, API_ID, API_HASH
 
@@ -37,6 +38,7 @@ register_admin_handlers(app)
 register_teacher_handlers(app)
 register_user_handlers(app)
 register_report_handlers(app)
+register_utils_handlers(app)
 
 
 app.run()

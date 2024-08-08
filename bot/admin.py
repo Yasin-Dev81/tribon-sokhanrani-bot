@@ -5,7 +5,7 @@ import asyncio
 import datetime
 import re
 
-from config import ADMINS_LIST_ID
+from config import ADMINS_LIST_ID, TIME_ZONE
 from .home import send_home_message_admin
 from .pagination import (
     get_paginated_keyboard,
@@ -62,7 +62,7 @@ class Practice:
             reply_markup=ForceReply(selective=True),
         )
 
-    def add_db(self, title, caption, end_date, start_date=datetime.datetime.now()):
+    def add_db(self, title, caption, end_date, start_date=datetime.datetime.now(TIME_ZONE)):
         if isinstance(start_date, str):
             start_date = datetime.datetime.strptime(start_date, "%d/%m/%Y")
         end_date = datetime.datetime.strptime(end_date, "%d/%m/%Y")
@@ -756,7 +756,7 @@ class ActivePractice(BasePractice):
 
     @property
     def practices(self):
-        current_time = datetime.datetime.now()
+        current_time = datetime.datetime.now(TIME_ZONE)
         with db.get_session() as session:
             practices = (
                 session.query(db.PracticeModel.id, db.PracticeModel.title)

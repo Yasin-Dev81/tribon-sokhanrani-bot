@@ -10,7 +10,7 @@ import asyncio
 
 from .pagination import get_paginated_keyboard
 from .home import send_home_message_user
-from config import ADMINS_LIST_ID, GROUP_CHAT_ID
+from config import ADMINS_LIST_ID, GROUP_CHAT_ID, TIME_ZONE
 import db
 
 
@@ -75,7 +75,7 @@ class ActivePractice:
         )
 
     def practices(self, user_tell_id):
-        current_time = datetime.datetime.now()
+        current_time = datetime.datetime.now(TIME_ZONE)
         with db.get_session() as session:
             practices = (
                 session.query(db.PracticeModel.id, db.PracticeModel.title)
@@ -150,8 +150,8 @@ class ActivePractice:
                     db.PracticeModel.title,
                     db.PracticeModel.caption,
                     and_(
-                        db.PracticeModel.start_date <= datetime.datetime.now(),
-                        db.PracticeModel.end_date >= datetime.datetime.now(),
+                        db.PracticeModel.start_date <= datetime.datetime.now(TIME_ZONE),
+                        db.PracticeModel.end_date >= datetime.datetime.now(TIME_ZONE),
                     ).label("status"),
                 )
                 .filter(db.PracticeModel.id == pk)
@@ -173,8 +173,8 @@ class ActivePractice:
                     db.UserPracticeModel.teacher_voice_link,
                     db.UserPracticeModel.teacher_video_link,
                     and_(
-                        db.PracticeModel.start_date <= datetime.datetime.now(),
-                        db.PracticeModel.end_date >= datetime.datetime.now(),
+                        db.PracticeModel.start_date <= datetime.datetime.now(TIME_ZONE),
+                        db.PracticeModel.end_date >= datetime.datetime.now(TIME_ZONE),
                     ).label("status"),
                 )
                 .join(
@@ -321,6 +321,17 @@ class ActivePractice:
             session.commit()
             return new_user_practice.id
 
+    @staticmethod
+    def practice_status(practice_id):
+        with db.get_session() as session:
+            query = session.query(
+                and_(
+                    db.PracticeModel.start_date <= datetime.datetime.now(TIME_ZONE),
+                    db.PracticeModel.end_date >= datetime.datetime.now(TIME_ZONE),
+                ).label("status"),
+            ).filter_by(id=practice_id)
+            return query.first().status
+
     async def upload(self, client, message):
         practice_id = int(message.reply_to_message.text.split("\n")[0])
 
@@ -330,6 +341,13 @@ class ActivePractice:
         if not media_status:
             await message.reply_text(
                 "ویدیوی ارسالی باید کمتر از <b>50 مگابایت</b> باشد!"
+            )
+            return
+
+        if not self.practice_status(practice_id):
+            await message.reply_to_message.delete()
+            await message.reply_text(
+                "مدت زمان آپلود تمرین تمام شده است!"
             )
             return
 
@@ -410,9 +428,43 @@ class ActivePractice:
                 session.commit()
             return pk
 
+    @staticmethod
+    def user_practice_status(user_practice_id):
+        with db.get_session() as session:
+            query = (
+                session.query(
+                    db.UserPracticeModel.id,
+                    and_(
+                        db.PracticeModel.start_date <= datetime.datetime.now(TIME_ZONE),
+                        db.PracticeModel.end_date >= datetime.datetime.now(TIME_ZONE),
+                    ).label("status"),
+                )
+                .join(
+                    db.PracticeModel,
+                    db.PracticeModel.id == db.UserPracticeModel.practice_id,
+                )
+                .filter_by(id=user_practice_id)
+            )
+            return query.first().status
+
     async def reupload(self, client, message):
         user_practice_id = int(message.reply_to_message.text.split("\n")[0])
+
         media_id = message.video.file_id
+        media_status = (message.video.file_size / 1024) <= 50_000
+
+        if not media_status:
+            await message.reply_text(
+                "ویدیوی ارسالی باید کمتر از <b>50 مگابایت</b> باشد!"
+            )
+            return
+
+        if not self.user_practice_status(user_practice_id):
+            await message.reply_to_message.delete()
+            await message.reply_text(
+                "مدت زمان آپلود تمرین تمام شده است!"
+            )
+            return
 
         capt = (
             f"message id: <i>{message.id}</i>\n---\n"
@@ -558,8 +610,8 @@ class AnsweredPractice:
             practice = session.query(
                 db.PracticeModel,
                 and_(
-                    db.PracticeModel.start_date <= datetime.datetime.now(),
-                    db.PracticeModel.end_date >= datetime.datetime.now(),
+                    db.PracticeModel.start_date <= datetime.datetime.now(TIME_ZONE),
+                    db.PracticeModel.end_date >= datetime.datetime.now(TIME_ZONE),
                 ).label("status"),
             ).get(pk)
             return practice
@@ -580,8 +632,8 @@ class AnsweredPractice:
                     db.PracticeModel.start_date,
                     db.PracticeModel.end_date,
                     and_(
-                        db.PracticeModel.start_date <= datetime.datetime.now(),
-                        db.PracticeModel.end_date >= datetime.datetime.now(),
+                        db.PracticeModel.start_date <= datetime.datetime.now(TIME_ZONE),
+                        db.PracticeModel.end_date >= datetime.datetime.now(TIME_ZONE),
                     ).label("status"),
                 )
                 .join(

@@ -48,7 +48,12 @@ async def send_home_message_user(message, user_name="کاربر"):
         f"<b>tribon sokhanrani</b> 🤖 <i>v{BOT_VERSION}</i>\n\n"
         f"<a href='{LEARN_URL}'>ℹ️ ویدیو آموزشی نحوه ارسال تمرینات</a>",
         reply_markup=ReplyKeyboardMarkup(
-            [["تمرین‌های فعال", "تحویل داده شده‌ها"], ["my settings"]],
+            [
+                ["تمرین‌های فعال"],
+                ["تصحیح شده‌ها", "تحویل داده شده‌ها"],
+                ["قوانین"],
+                ["my settings"],
+            ],
             resize_keyboard=True,
         ),
     )
@@ -74,7 +79,9 @@ async def back_home(client, callback_query):
             .first()
         )
         if teahcer_st:
-            await send_home_message_teacher(callback_query.message, teacher=teahcer_st.name)
+            await send_home_message_teacher(
+                callback_query.message, teacher=teahcer_st.name
+            )
             return
         user = (
             session.query(db.UserModel)

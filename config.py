@@ -42,3 +42,14 @@ PRACTICES_PER_PAGE = config("PRACTICES_PER_PAGE", cast=int, default=5)
 LEARN_URL = config("LEARN_URL", cast=str, default="https://t.me/sokhanrani/1389")
 
 TIME_ZONE = pytz.timezone(config("TIME_ZONE", cast=str, default="Asia/Tehran"))
+
+
+default_info_msg = """
+- ویدیوی آپلود شده باید کمتر از 50 مگابایت باشد.
+- کپشن ویدیو‌های آپلود شده ذخیره خواهند شد.
+- امکان ویرایش تکلیف تحویل داده شده فقط تا زمان ددلاین تمرین فراهم است، مگر آنکه تکلیف درحال تصحیح توسط منتور باشد.
+- درصورت مشاهده‌ی هرگونه مشکل به ادمین مراجعه کنید.
+
+باتشکر
+"""
+INFO_MSG = config("INFO_MSG", cast=str, default=default_info_msg)

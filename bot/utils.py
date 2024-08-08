@@ -1,7 +1,7 @@
 from pyrogram import filters
 import datetime
 
-from config import TIME_ZONE
+from config import TIME_ZONE, INFO_MSG
 
 
 def build_tree(data, indent=0, is_last=True):
@@ -35,6 +35,11 @@ async def chat_id(client, message):
     await message.reply_text(build_tree(data))
 
 
+async def info(client, message):
+    await message.reply_text(INFO_MSG)
+
+
 def register_utils_handlers(app):
     app.on_message(filters.command("time"))(time)
     app.on_message(filters.command("chat_id"))(chat_id)
+    app.on_message(filters.regex("قوانین"))(info)

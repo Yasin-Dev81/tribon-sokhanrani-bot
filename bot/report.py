@@ -26,7 +26,7 @@ def is_teacher(filter, client, update):
 
 class Report:
     current_time = datetime.datetime.now(TIME_ZONE)
-    emojies = ["🥇", "🥈", "🥉"]
+    emojies = ["🥇", "🥈", "🥉", " 4. ", " 5. "]
 
     def __init__(self) -> None:
         with db.get_session() as session:
@@ -120,7 +120,7 @@ class Report:
             .filter(db.UserPracticeModel.teacher_caption.isnot(None))
             .group_by(db.TeacherModel.id, db.TeacherModel.name)
             .order_by(desc("assignments_reviewed"))
-            .limit(3)
+            .limit(5)
             .all()
         )
 

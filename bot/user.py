@@ -347,14 +347,16 @@ class ActivePractice:
         if not self.practice_status(practice_id):
             await message.reply_to_message.delete()
             await message.reply_text(
-                "مدت زمان آپلود تمرین تمام شده است!"
+                "دیگر امکان آپلود تمرین نمی‌باشد!\n"
+                "<spoiler>لطفا قوانین را مطالعه فرمایید.</spoiler>"
             )
             return
 
         capt = (
             f"message id: <i>{message.id}</i>\n---\n"
             f"from user @{message.from_user.username}\n"
-            f"user caption:\n{message.caption or 'No Caption!'}"
+            f"user caption:\n{message.caption or 'No Caption!'}\n"
+            f"practice_id: {practice_id}"
         )
 
         # Forward the video to the channel
@@ -437,6 +439,7 @@ class ActivePractice:
                     and_(
                         db.PracticeModel.start_date <= datetime.datetime.now(TIME_ZONE),
                         db.PracticeModel.end_date >= datetime.datetime.now(TIME_ZONE),
+                        db.UserPracticeModel.teacher_id.is_not(None),
                     ).label("status"),
                 )
                 .join(
@@ -462,7 +465,8 @@ class ActivePractice:
         if not self.user_practice_status(user_practice_id):
             await message.reply_to_message.delete()
             await message.reply_text(
-                "مدت زمان آپلود تمرین تمام شده است!"
+                "دیگر امکان آپلود تمرین نمی‌باشد!\n"
+                "<spoiler>لطفا قوانین را مطالعه فرمایید.</spoiler>"
             )
             return
 
@@ -509,40 +513,10 @@ class AnsweredPractice:
             filters.regex(r"user_answered_practice_select_(\d+)")
             & filters.create(is_user)
         )(self.select)
-        # self.app.on_callback_query(
-        #     filters.regex(r"user_answered_practice_answer_(\d+)")
-        #     & filters.create(is_user)
-        # )(self.answer)
-        # self.app.on_message(
-        #     filters.reply
-        #     & filters.video
-        #     & filters.create(is_user)
-        #     & filters.create(self.is_new_answer_msg)
-        # )(self.upload)
         self.app.on_callback_query(
             filters.regex(r"user_answered_practice_reanswer_(\d+)")
             & filters.create(is_user)
         )(self.reanswer)
-        self.app.on_message(
-            filters.reply
-            & filters.video
-            & filters.create(is_user)
-            & filters.create(self.is_reanswer_msg)
-        )(self.reupload)
-
-    @staticmethod
-    def is_new_answer_msg(filter, client, update):
-        return (
-            "Just send answer as a reply to this message"
-            in update.reply_to_message.text
-        )
-
-    @staticmethod
-    def is_reanswer_msg(filter, client, update):
-        return (
-            "Just send xx answer as a reply to this message"
-            in update.reply_to_message.text
-        )
 
     def practices(self, user_tell_id):
         with db.get_session() as session:
@@ -737,12 +711,6 @@ class AnsweredPractice:
         except Exception:
             pass
 
-        # await callback_query.message.reply_text(
-        #     "ویدیوی خود را ریپلی کنید.",
-        #     reply_markup=InlineKeyboardMarkup(
-        #         [[InlineKeyboardButton("exit!", callback_data="back_home")]]
-        #     ),
-        # )
         await callback_query.message.reply_text(
             f"{practice_id}\n"
             "👈 <b>ابتدا به این پیام ریپلای (پاسخ) بزنید سپس ویدئوی خود را ارسال کنید.</b>\n\n"
@@ -769,67 +737,6 @@ class AnsweredPractice:
                 ),
             )
 
-    @staticmethod
-    def upload_db(user_id, file_link, practice_id, user_caption=None):
-        with db.get_session() as session:
-            new_user_practice = db.UserPracticeModel(
-                user_id=user_id,
-                file_link=file_link,
-                practice_id=practice_id,
-                user_caption=user_caption,
-            )
-            session.add(new_user_practice)
-            session.commit()
-            return new_user_practice.id
-
-    async def upload(self, client, message):
-        practice_id = int(message.reply_to_message.text.split("\n")[0])
-
-        media_id = message.video.file_id
-        media_status = (message.video.file_size / 1024) <= 50_000
-
-        if not media_status:
-            await message.reply_text(
-                "ویدیوی ارسالی باید کمتر از <b>50 مگابایت</b> باشد!"
-            )
-            return
-
-        capt = (
-            f"message id: <i>{message.id}</i>\n---\n"
-            f"from user @{message.from_user.username}\n"
-            f"user caption:\n{message.caption or 'No Caption!'}"
-        )
-
-        # Forward the video to the channel
-        forwarded_message = await client.send_video(
-            chat_id=GROUP_CHAT_ID, video=media_id, caption=capt
-        )
-        telegram_link = forwarded_message.video.file_id
-        # user_id = db.User().read_with_tell_id(tell_id=message.from_user.id).id
-        with db.get_session() as session:
-            user_id = (
-                session.query(db.UserModel)
-                .filter_by(tell_id=message.from_user.id)
-                .first()
-                .id
-            )
-
-            # Store the Telegram link in the database
-            user_practice_id = self.upload_db(
-                user_id=user_id,
-                practice_id=practice_id,
-                file_link=telegram_link,
-                user_caption=message.caption,
-            )
-
-        await message.reply_to_message.delete()
-        await message.reply_text("تمرین با موفقیت ثبت شد.")
-        await send_home_message_user(message)
-
-        asyncio.create_task(
-            self.send_admin_upload_notification(client, user_practice_id)
-        )
-
     async def reanswer(self, client, callback_query):
         practice_id = int(callback_query.data.split("_")[-1])
 
@@ -843,12 +750,6 @@ class AnsweredPractice:
         except Exception:
             pass
 
-        # await callback_query.message.reply_text(
-        #     "پیام خود را ریپلی کنید.",
-        #     reply_markup=InlineKeyboardMarkup(
-        #         [[InlineKeyboardButton("exit!", callback_data="back_home")]]
-        #     ),
-        # )
         await callback_query.message.reply_text(
             f"{practice_id}\n"
             "👈 <b>ابتدا به این پیام ریپلای (پاسخ) بزنید سپس ویدئوی اصلاحی خود را ارسال کنید.</b>\n\n"
@@ -857,52 +758,82 @@ class AnsweredPractice:
             reply_markup=ForceReply(selective=True),
         )
 
-    @staticmethod
-    def update_db(pk, file_link, user_caption=None):
+
+class UserPracticeCorrected:
+    def __init__(self, app):
+        self.app = app
+        self.register_handlers()
+
+    def register_handlers(self):
+        self.app.on_message(
+            filters.regex("تصحیح شده‌ها") & filters.create(is_user)
+        )(self.list)
+        # self.app.on_callback_query(
+        #     filters.regex(r"user_answered_practice_paginate_list_(\d+)")
+        #     & filters.create(is_user)
+        # )(self.paginate_list)
+
+    def practices(self, user_tell_id):
         with db.get_session() as session:
-            user_practice = session.query(db.UserPracticeModel).get(pk)
-            if user_practice:
-                user_practice.file_link = file_link
-                if user_caption is not None:
-                    user_practice.user_caption = user_caption
-                session.commit()
-            return pk
+            query = (
+                session.query(db.PracticeModel.id, db.PracticeModel.title)
+                .join(
+                    db.UserPracticeModel,
+                    db.PracticeModel.id == db.UserPracticeModel.practice_id,
+                )
+                .join(db.UserModel, db.UserModel.id == db.UserPracticeModel.user_id)
+                .filter(db.UserModel.tell_id == user_tell_id)
+                .filter(db.UserPracticeModel.teacher_caption.is_not(None))
+            )
 
-    async def reupload(self, client, message):
-        user_practice_id = int(message.reply_to_message.text.split("\n")[0])
-        media_id = message.video.file_id
-        media_status = (message.video.file_size / 1024) <= 50_000
+            return query.all()
 
-        if not media_status:
-            await message.reply_text(
-                "ویدیوی ارسالی باید کمتر از <b>50 مگابایت</b> باشد!"
+    async def list(self, client, message):
+        await message.reply_text("comming soon...")
+        # practices = self.practices(message.from_user.id)
+        # if not practices:
+        #     await message.reply_text("هیچ تکلیفی موجود نیست!")
+        #     return
+
+        # await message.reply_text(
+        #     "تمارین فعال:",
+        #     reply_markup=get_paginated_keyboard(
+        #         practices,
+        #         0,
+        #         "user_answered_practice_paginate_list",
+        #         "user_answered_practice_select",
+        #     ),
+        # )
+
+    async def paginate_list(self, client, callback_query):
+        page = int(callback_query.data.split("_")[-1])
+        practices = self.practices(callback_query.from_user.id)
+
+        if not practices:
+            await callback_query.message.reply_text("هیچ تکلیفی موجود نیست!")
+            return
+
+        if page == 0:
+            await callback_query.message.delete()
+            await callback_query.message.reply_text(
+                "تمارین فعال:",
+                reply_markup=get_paginated_keyboard(
+                    practices,
+                    page,
+                    "user_answered_practice_paginate_list",
+                    "user_answered_practice_select",
+                ),
             )
             return
 
-        capt = (
-            f"message id: <i>{message.id}</i>\n---\n"
-            f"from user @{message.from_user.username}\n"
-            f"user caption:\n{message.caption or 'No Caption!'}"
+        await callback_query.message.edit_reply_markup(
+            reply_markup=get_paginated_keyboard(
+                practices,
+                page,
+                "user_answered_practice_paginate_list",
+                "user_answered_practice_select",
+            )
         )
-
-        # Forward the video to the channel
-        forwarded_message = await client.send_video(
-            chat_id=GROUP_CHAT_ID, video=media_id, caption=capt
-        )
-        telegram_link = forwarded_message.video.file_id
-
-        # Store the Telegram link in the database
-        self.update_db(
-            pk=user_practice_id,
-            file_link=telegram_link,
-            user_caption=message.caption or None,
-        )
-
-        await message.reply_to_message.delete()
-        await message.reply_text("تمرین با موفقیت ثبت شد.")
-        await send_home_message_user(message)
-
-        # asyncio.create_task(self.send_admin_upload_notification(client, user_practice_id))
 
 
 async def user_settings(client, message):
@@ -926,3 +857,4 @@ def register_user_handlers(app):
 
     ActivePractice(app)
     AnsweredPractice(app)
+    UserPracticeCorrected(app)

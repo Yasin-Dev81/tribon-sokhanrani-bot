@@ -1,5 +1,6 @@
 from pyrogram.types import ReplyKeyboardMarkup
 from pyrogram import filters
+import pyrostep
 
 from config import ADMINS_LIST_ID, BOT_VERSION, LEARN_URL
 import db
@@ -14,7 +15,8 @@ async def send_home_message_admin(message):
             [
                 ["تعریف تمرین جدید"],
                 ["تکالیف بدون معلم"],
-                ["تمرین‌های فعال", "تمامی تمرین‌ها", "تکالیف تحلیل شده"],
+                ["تکالیف تحلیل شده", "تکالیف تحلیل نشده"],
+                ["تمرین‌های فعال", "تمامی تمرین‌ها", "تمامی تکالیف"],
                 ["یوزرها", "اضافه کردن یوزر جدید"],
                 ["معلم‌ها", "اضافه کردن معلم جدید"],
                 ["ارسال نوتیفیکیشن"],
@@ -34,7 +36,7 @@ async def send_home_message_teacher(message, teacher_name="معلم"):
             [
                 ["تکالیف نیازمند به تحلیل سخنرانی"],
                 ["تمرین‌های فعال", "تمامی تمرین‌ها"],
-                ["my settings"],
+                ["اطلاعات من ℹ️"],
             ],
             resize_keyboard=True,
         ),
@@ -51,8 +53,8 @@ async def send_home_message_user(message, user_name="کاربر"):
             [
                 ["تمرین‌های فعال"],
                 ["تصحیح شده‌ها", "تحویل داده شده‌ها"],
-                ["قوانین"],
-                ["my settings"],
+                ["قوانین 📝"],
+                ["اطلاعات من ℹ️"],
             ],
             resize_keyboard=True,
         ),
@@ -61,7 +63,8 @@ async def send_home_message_user(message, user_name="کاربر"):
 
 async def back_home(client, callback_query):
     # Acknowledge the callback query
-    await callback_query.answer()
+    # await callback_query.answer()
+    await pyrostep.unregister_steps(callback_query.from_user.id)
     try:
         await callback_query.message.delete()
     except Exception:
@@ -80,7 +83,7 @@ async def back_home(client, callback_query):
         )
         if teahcer_st:
             await send_home_message_teacher(
-                callback_query.message, teacher=teahcer_st.name
+                callback_query.message, teacher_name=teahcer_st.name
             )
             return
         user = (

@@ -1,6 +1,8 @@
 from pyrogram import Client
 import uvloop
 import logging
+# import pyrostep
+
 
 from bot import (
     register_start_handlers,
@@ -29,6 +31,8 @@ if API_ID and API_HASH and BOT_TOKEN:
     )
 else:
     app = Client(TELL_CONFIG)
+
+# pyrostep.listen(app)
 
 
 # Register handlers

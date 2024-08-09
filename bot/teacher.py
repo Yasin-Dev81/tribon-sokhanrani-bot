@@ -1,4 +1,5 @@
 from pyrogram import filters
+from persiantools.jdatetime import JalaliDate
 from sqlalchemy import func
 from pyrogram.types import (
     InlineKeyboardMarkup,
@@ -121,6 +122,7 @@ class BasePractice:
                 session.query(
                     db.PracticeModel.title,
                     db.PracticeModel.caption,
+                    db.PracticeModel.end_date,
                     total_count_subquery.label("total_count"),
                     teacher_caption_count_subquery.label("teacher_caption_count"),
                     db.UserTypeModel.name.label("user_type_name"),
@@ -144,6 +146,7 @@ class BasePractice:
 
         await callback_query.message.reply_text(
             f"📌 عنوان: {practice.title}\n🔖 متن سوال: {practice.caption}\n"
+            f"◾️ ددلاین تمرین: {JalaliDate(practice.end_date).strftime('%c | ساعت %H:%M:%S', locale='fa')}\n"
             f"◾️ تایپ یوزرهای سوال: {practice.user_type_name}\n",
             reply_markup=InlineKeyboardMarkup(
                 [
@@ -215,6 +218,7 @@ class BasePractice:
             await callback_query.message.delete()
             await callback_query.message.reply_text(
                 f"📌 عنوان: {practice.title}\n🔖 متن سوال: {practice.caption}\n"
+                f"◾️ ددلاین تمرین: {JalaliDate(practice.end_date).strftime('%c | ساعت %H:%M:%S', locale='fa')}\n"
                 f"◾️ تایپ یوزرهای سوال: {practice.user_type_name}",
                 reply_markup=user_practice_paginated_keyboard(
                     user_practices,
@@ -327,7 +331,7 @@ class BasePractice:
                         InlineKeyboardButton(
                             "exit!",
                             callback_data="back_home",
-                        )
+                        ),
                     ]
                 ]
             ),
@@ -986,7 +990,7 @@ class NONEPractice:
                         InlineKeyboardButton(
                             "exit!",
                             callback_data="back_home",
-                        )
+                        ),
                     ]
                 ]
             ),
@@ -1272,8 +1276,22 @@ class NONEPractice:
 async def teacher_my_settings(client, message):
     with db.get_session() as session:
         teacher = (
-            session.query(db.TeacherModel)
-            .filter_by(tell_id=message.from_user.id)
+            session.query(
+                db.TeacherModel.id,
+                db.TeacherModel.name,
+                db.TeacherModel.tell_id,
+                db.TeacherModel.phone_number,
+                func.count(db.UserPracticeModel.id).label("user_practice_count"),
+                func.count(
+                    func.nullif(db.UserPracticeModel.teacher_caption, None)
+                ).label("corrected_user_practice_count"),
+            )
+            .join(
+                db.UserPracticeModel,
+                db.UserPracticeModel.teacher_id == db.TeacherModel.id,
+            )
+            .filter(db.TeacherModel.tell_id == message.from_user.id)
+            .group_by(db.TeacherModel.id)
             .first()
         )
         await message.reply(
@@ -1281,12 +1299,15 @@ async def teacher_my_settings(client, message):
             f"🆔 teacher-id: <i>{teacher.id}</i>\n"
             f"👤 teacher-name: <code>{teacher.name}</code>\n"
             f"◾️ teacher-tell-id: <i>{teacher.tell_id}</i>\n"
-            f"📞 teacher-phone-number: {teacher.phone_number}"
+            f"📞 teacher-phone-number: {teacher.phone_number}\n"
+            "➖➖➖➖➖➖➖➖➖\n"
+            f"▫️ تعداد تکلیف تخصیص داده شده: {teacher.user_practice_count}\n"
+            f"▫️ تعداد تکلیف تصحیح شده: {teacher.corrected_user_practice_count}"
         )
 
 
 def register_teacher_handlers(app):
-    app.on_message(filters.regex("my settings") & filters.create(is_teacher))(
+    app.on_message(filters.regex("اطلاعات من") & filters.create(is_teacher))(
         teacher_my_settings
     )
 

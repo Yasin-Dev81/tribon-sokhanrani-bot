@@ -18,7 +18,7 @@ def user_update_with_phone_number(phone_number, tell_id, chat_id):
             user.chat_id = chat_id
             # user.name = name
             session.commit()
-            return (True, user.name)
+            return user.name
     return False
 
 
@@ -31,7 +31,7 @@ def teacher_update_with_phone_number(phone_number, tell_id, chat_id):
             user.tell_id = tell_id
             user.chat_id = chat_id
             session.commit()
-            return (True, user.name)
+            return user.name
     return False
 
 
@@ -84,8 +84,8 @@ async def contact(client, message):
     )
     print("----- login user", user_phone_number, user_status)
 
-    if user_status[0]:
-        await send_home_message_user(message, user_name=user_status[1])
+    if user_status:
+        await send_home_message_user(message, user_name=user_status)
         return
 
     teacher_status = teacher_update_with_phone_number(
@@ -95,8 +95,8 @@ async def contact(client, message):
     )
     print("----- login teacher", user_phone_number, teacher_status)
 
-    if teacher_status[0]:
-        await send_home_message_teacher(message, teacher_name=teacher_status[1])
+    if teacher_status:
+        await send_home_message_teacher(message, teacher_name=teacher_status)
         return
 
     await message.reply_text("No Access, Please send message to admin!")

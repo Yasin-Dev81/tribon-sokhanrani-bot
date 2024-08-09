@@ -1,6 +1,6 @@
 FROM python:3.10-slim
 
-ENV BOT_VERSION="6.9"
+ENV BOT_VERSION="7.0"
 
 WORKDIR /code
 

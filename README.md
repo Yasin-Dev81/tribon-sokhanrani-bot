@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://github.com/gozargah/marzban" target="_blank" rel="noopener noreferrer">
+  <a href="https://github.com/Yasin-Dev81/tribon-sokhanrani-bot" target="_blank" rel="noopener noreferrer">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Yasin-Dev81/tribon-sokhanrani-bot/master/logo.jpg">
       <img width="160" height="160" src="https://raw.githubusercontent.com/Yasin-Dev81/tribon-sokhanrani-bot/master/logo.jpg">
@@ -40,20 +40,22 @@ pass
 - ارسال نوتیفیکشن بصورت جدا برای یوزرها، معلم‌ها، ادمین‌ها و همچنین تمامی کاربران
 - مشاهده‌ی گزارش عملکرد برای ادمین
 # Preview
-- 
-
--  <a href="https://t.me/sokhanrani/1389" target="_blank" rel="noopener noreferrer" >
-    نحوه‌ی استفاده از بات سمت یوزر
-  </a>
--  <a href="https://t.me/sokhanrani/1389" target="_blank" rel="noopener noreferrer" >
-    پنل ادمین
-  </a>
--  <a href="https://t.me/sokhanrani/1389" target="_blank" rel="noopener noreferrer" >
-    پنل معلم
-  </a>
-- <a href="https://raw.githubusercontent.com/Yasin-Dev81/tribon-sokhanrani-bot/master/db.png" target="_blank" rel="noopener noreferrer" >
-    ساختار دیتابیس
-  </a>
+-  <a href="https://t.me/sokhanrani/1389" target="_blank" rel="noopener noreferrer" >نحوه‌ی استفاده از بات سمت یوزر</a>
+-  <p align="center">
+  <a href="https://github.com/Yasin-Dev81/tribon-sokhanrani-bot" target="_blank" rel="noopener noreferrer" >
+    <img src="https://raw.githubusercontent.com/Yasin-Dev81/tribon-sokhanrani-bot/master/admin-panel.jpg" alt="Marzban screenshots" width="600" height="auto">
+  </a> پنل ادمین
+</p>
+-  <p align="center">
+  <a href="https://github.com/Yasin-Dev81/tribon-sokhanrani-bot" target="_blank" rel="noopener noreferrer" >
+    <img src="https://raw.githubusercontent.com/Yasin-Dev81/tribon-sokhanrani-bot/master/teacher-panel.jpg" alt="Marzban screenshots" width="600" height="auto">
+  </a> پنل منتور
+</p>
+-  <p align="center">
+  <a href="https://github.com/Yasin-Dev81/tribon-sokhanrani-bot" target="_blank" rel="noopener noreferrer" >
+    <img src="https://raw.githubusercontent.com/Yasin-Dev81/tribon-sokhanrani-bot/master/db.png" alt="Marzban screenshots" width="600" height="auto">
+  </a> ساختار دیتابیس
+</p>
 
 # Configuration
 
@@ -61,15 +63,15 @@ pass
 
 | Variable                                 | Description                                                                                                              |
 | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| TELL_CONFIG                              | Superuser's username                                                                                                     |
-| BOT_TOKEN                                | Superuser's password                                                                                                     |
-| BOT_TOKEN                                | Database URL ([SQLAlchemy's docs](https://docs.sqlalchemy.org/en/20/core/engines.html#database-urls))                    |
-| API_HASH                                 | Bind application to this host (default: `0.0.0.0`)                                                                       |
-| SQLALCHEMY_DATABASE_URL                  | Bind application to this port (default: `8000`)                                                                          |
-| ADMINS_LIST_ID                           | Bind application to a UNIX domain socket                                                                                 |
-| GROUP_CHAT_ID                            | SSL certificate file to have application on https                                                                        |
-| PRACTICES_PER_PAGE                       | SSL key file to have application on https                                                                                |
-| LEARN_URL                                | Path of Xray's json config file (default: `xray_config.json`)                                                            |
+| TELL_CONFIG                              | Telegram Config                                                                                                          |
+| BOT_TOKEN                                | Telegram Api                                                                                                             |
+| BOT_TOKEN                                | Telegram Api                                                                                                             |
+| API_HASH                                 | Telegram Api                                                                                                             |
+| SQLALCHEMY_DATABASE_URL                  | Database URL ([SQLAlchemy's docs](https://docs.sqlalchemy.org/en/20/core/engines.html#database-urls))                    |
+| ADMINS_LIST_ID                           | List of Admins                                                                                                           |
+| GROUP_CHAT_ID                            | Group ID for save media                                                                                                  |
+| PRACTICES_PER_PAGE                       | pagination                                                                                                               |
+| LEARN_URL                                | url for usage learn                                                                                                      |
 
 
 # Donation
@@ -83,9 +85,3 @@ If you found Marzban useful and would like to support its development, you can m
 - TON network: `EQAVf-7hAXHlF-jmrKE44oBwN7HGQFVBLAtrOsev5K4qR4P8`
 
 Thank you for your support!
-
-<p align="center">
-  <a href="https://github.com/gozargah/marzban" target="_blank" rel="noopener noreferrer" >
-    <img src="https://github.com/Gozargah/Marzban-docs/raw/master/screenshots/preview.png" alt="Marzban screenshots" width="600" height="auto">
-  </a>
-</p>

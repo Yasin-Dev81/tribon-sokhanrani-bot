@@ -41,20 +41,20 @@ pass
 - مشاهده‌ی گزارش عملکرد برای ادمین
 # Preview
 -  <a href="https://t.me/sokhanrani/1389" target="_blank" rel="noopener noreferrer" >نحوه‌ی استفاده از بات سمت یوزر</a>
--  <p align="center">
+-  <p align="center"> پنل ادمین
   <a href="https://github.com/Yasin-Dev81/tribon-sokhanrani-bot" target="_blank" rel="noopener noreferrer" >
     <img src="https://raw.githubusercontent.com/Yasin-Dev81/tribon-sokhanrani-bot/master/admin-panel.jpg" alt="Marzban screenshots" width="600" height="auto">
-  </a> پنل ادمین
+  </a>
 </p>
--  <p align="center">
+-  <p align="center"> پنل منتور
   <a href="https://github.com/Yasin-Dev81/tribon-sokhanrani-bot" target="_blank" rel="noopener noreferrer" >
     <img src="https://raw.githubusercontent.com/Yasin-Dev81/tribon-sokhanrani-bot/master/teacher-panel.jpg" alt="Marzban screenshots" width="600" height="auto">
-  </a> پنل منتور
+  </a> 
 </p>
--  <p align="center">
+-  <p align="center"> ساختار دیتابیس
   <a href="https://github.com/Yasin-Dev81/tribon-sokhanrani-bot" target="_blank" rel="noopener noreferrer" >
     <img src="https://raw.githubusercontent.com/Yasin-Dev81/tribon-sokhanrani-bot/master/db.png" alt="Marzban screenshots" width="600" height="auto">
-  </a> ساختار دیتابیس
+  </a>
 </p>
 
 # Configuration

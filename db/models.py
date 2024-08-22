@@ -1,88 +1,201 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, BigInteger
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.schema import PrimaryKeyConstraint, ForeignKeyConstraint
+from sqlalchemy.sql import func
+from sqlalchemy import types, Enum
+from typing import NewType
+from datetime import datetime
+import enum
 
-# from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship, backref
+from config import TIME_ZONE
 
-from db.base import Base
-# Base = declarative_base()
+
+String100 = NewType("String100", str)
+String50 = NewType("String50", str)
+String13 = NewType("String13", str)
+BigInteger = NewType("BigInteger", int)
+CaptionText = NewType("CaptionText", str)
+FileId = NewType("FileId", str)
+
+
+class MediaType(enum.Enum):
+    TEXT = "متن"
+    PHOTO = "عکس"
+    DOCUMENT = "فایل"
+    VIDEO = "ویدئو"
+    VOICE = "ویس"
+    AUDIO = "فایل صوتی"
+    VIDEO_NOTE = "ویدیو نوت (ویدیو مسیج)"
+
+
+class UserLevel(enum.Enum):
+    USER = "User"
+    TEACHER = "Theacher"
+
+
+class Base(DeclarativeBase):
+    type_annotation_map = {
+        String100: types.String(length=100),
+        String50: types.String(length=50),
+        String13: types.String(length=13),
+        datetime: types.DateTime(timezone=True),
+        MediaType: Enum(MediaType),
+        UserLevel: Enum(UserLevel),
+        BigInteger: types.BigInteger(),
+        CaptionText: types.Text(length=4096),
+        FileId: types.Text(length=100),
+    }
 
 
 class UserType(Base):
     __tablename__ = "user_type"
-    id = Column(Integer, primary_key=True)
-    name = Column(String(50), nullable=False, unique=True)
+    __table_args__ = (PrimaryKeyConstraint("id", name="user_type_pk"),)
+
+    id: Mapped[int]
+    name: Mapped[String50]
 
 
 class User(Base):
     __tablename__ = "user"
-    id = Column(Integer, primary_key=True)
-    tell_id = Column(BigInteger, nullable=True)
-    phone_number = Column(String(13), nullable=False, unique=True)
-    chat_id = Column(BigInteger, nullable=True)
-    name = Column(String(100), nullable=True)
-    user_type_id = Column(Integer, ForeignKey("user_type.id"))
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="user_pk"),
+        ForeignKeyConstraint(["user_type_id"], ["user_type.id"], ondelete="SET NULL"),
+    )
 
-    user_type = relationship("UserType", foreign_keys="User.user_type_id")
+    id: Mapped[int]
+    tell_id: Mapped[BigInteger | None]
+    phone_number: Mapped[String13] = mapped_column(unique=True)
+    chat_id: Mapped[BigInteger | None]
+    name: Mapped[String50]
 
-    def __repr__(self):
-        return f"{self.name} | {self.phone_number}"
-
-
-class Teacher(Base):
-    __tablename__ = "teacher"
-    id = Column(Integer, primary_key=True)
-    phone_number = Column(String(20), nullable=False, unique=True)
-    tell_id = Column(BigInteger, nullable=True)
-    chat_id = Column(BigInteger, nullable=True)
-    name = Column(String(100), nullable=True)
+    user_type_id: Mapped[int | None]
 
     def __repr__(self):
-        return f"{self.name} | {self.phone_number}"
+        return f"user | {self.name} | {self.phone_number}"
 
 
 class Practice(Base):
     __tablename__ = "practice"
-    id = Column(Integer, primary_key=True)
-    title = Column(String(100), nullable=False)
-    caption = Column(Text)
-    end_date = Column(DateTime)
-    start_date = Column(DateTime)
-    user_type_id = Column(Integer, ForeignKey("user_type.id"))
-
-    user_type = relationship(
-        UserType,
-        backref=backref("UserType", cascade="all,delete"),
-        foreign_keys="Practice.user_type_id",
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="practice_pk"),
+        ForeignKeyConstraint(["user_type_id"], ["user_type.id"], ondelete="SET NULL"),
     )
+
+    id: Mapped[int]
+    title: Mapped[String100]
+    caption: Mapped[CaptionText]
+
+    end_date: Mapped[datetime]
+    start_date: Mapped[datetime]
+
+    user_type_id: Mapped[int | None]
+
+    @property
+    def active(self):
+        return (datetime.now(TIME_ZONE) <= self.end_date) and (
+            datetime.now(TIME_ZONE) >= self.start_date
+        )
 
     def __repr__(self):
         return self.title
 
 
+class Teacher(Base):
+    __tablename__ = "teacher"
+    __table_args__ = (PrimaryKeyConstraint("id", name="teacher_pk"),)
+
+    id: Mapped[int]
+    tell_id: Mapped[BigInteger | None]
+    phone_number: Mapped[String13] = mapped_column(unique=True)
+    chat_id: Mapped[BigInteger | None]
+    name: Mapped[String50]
+
+    def __repr__(self):
+        return f"teacher | {self.name} | {self.phone_number}"
+
+
 class UserPractice(Base):
     __tablename__ = "user_practice"
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("user.id"))
-    user_caption = Column(Text, nullable=True)
-    file_link = Column(Text, nullable=False)
-    teacher_id = Column(Integer, ForeignKey("teacher.id"), nullable=True)
-    practice_id = Column(Integer, ForeignKey("practice.id"))
-    teacher_caption = Column(Text, nullable=True)
-    teacher_voice_link = Column(Text, nullable=True)
-    teacher_video_link = Column(Text, nullable=True)
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="user_practice_pk"),
+        ForeignKeyConstraint(["user_id"], ["user.id"], ondelete="CASCADE"),
+        ForeignKeyConstraint(["practice_id"], ["practice.id"], ondelete="CASCADE"),
+    )
 
-    user = relationship(
-        User,
-        backref=backref("User", cascade="all,delete"),
-        foreign_keys="UserPractice.user_id",
+    id: Mapped[int]
+    user_id: Mapped[int]
+    practice_id: Mapped[int]
+
+    media_type: Mapped[MediaType | None]
+    caption: Mapped[CaptionText | None]
+    file_link: Mapped[FileId | None]
+
+    datetime_created: Mapped[datetime] = mapped_column(
+        types.DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
     )
-    teacher = relationship(
-        Teacher,
-        backref=backref("Teacher", cascade="save-update"),
-        foreign_keys="UserPractice.teacher_id",
+    datetime_modified: Mapped[datetime] = mapped_column(
+        types.DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
     )
-    practice = relationship(
-        Practice,
-        backref=backref("Practice", cascade="all,delete"),
-        foreign_keys="UserPractice.practice_id",
+
+    def __repr__(self):
+        return f"{self.id} | practice: {self.practice_id} | user: {self.user_id}"
+
+
+class Correction(Base):
+    __tablename__ = "correction"
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="correction_pk"),
+        ForeignKeyConstraint(["teacher_id"], ["teacher.id"], ondelete="SET NULL"),
+        ForeignKeyConstraint(
+            ["user_practice_id"], ["user_practice.id"], ondelete="CASCADE"
+        ),
     )
+
+    id: Mapped[int]
+    teacher_id: Mapped[int | None]
+    user_practice_id: Mapped[int]
+
+    media_type: Mapped[MediaType | None]
+    caption: Mapped[CaptionText | None]
+    file_link: Mapped[FileId | None]
+
+    datetime_created: Mapped[datetime] = mapped_column(
+        types.DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    datetime_modified: Mapped[datetime] = mapped_column(
+        types.DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    def __repr__(self):
+        return f"{self.id} | user-practice: {self.user_practice_id} | teacher: {self.teacher_id}"
+
+
+class MediaAcsess(Base):
+    __tablename__ = "media_acsess"
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="media_acsess_pk"),
+        ForeignKeyConstraint(["practice_id"], ["practice.id"], ondelete="CASCADE"),
+    )
+
+    id: Mapped[int]
+    media_type: Mapped[MediaType]
+    practice_id: Mapped[int]
+
+    user_level: Mapped[UserLevel]
+
+    @property
+    def is_user(self):
+        return self.user_level == UserLevel.USER
+
+    @property
+    def is_teacher(self):
+        return self.user_level == UserLevel.TEACHER

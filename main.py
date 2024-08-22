@@ -1,7 +1,9 @@
-from pyrogram import Client
+# -*-coding:utf8-*-
+
+from pyrogram import Client, filters
 import uvloop
 import logging
-# import pyrostep
+import pyrostep
 
 
 from bot import (
@@ -12,6 +14,7 @@ from bot import (
     register_user_handlers,
     register_report_handlers,
     register_utils_handlers,
+    register_system_handlers,
 )
 from config import TELL_CONFIG, BOT_TOKEN, API_ID, API_HASH
 
@@ -21,6 +24,8 @@ logging.basicConfig(level=logging.WARN)
 # speed up
 uvloop.install()
 
+
+pyrostep.install()
 
 if API_ID and API_HASH and BOT_TOKEN:
     app = Client(
@@ -32,8 +37,7 @@ if API_ID and API_HASH and BOT_TOKEN:
 else:
     app = Client(TELL_CONFIG)
 
-# pyrostep.listen(app)
-
+app.listen(filters=~filters.command("back_home"))
 
 # Register handlers
 register_start_handlers(app)
@@ -43,6 +47,7 @@ register_teacher_handlers(app)
 register_user_handlers(app)
 register_report_handlers(app)
 register_utils_handlers(app)
+register_system_handlers(app)
 
 
 app.run()

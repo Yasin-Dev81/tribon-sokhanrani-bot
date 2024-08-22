@@ -1,7 +1,6 @@
 from pyrogram import filters
-import datetime
 
-from config import TIME_ZONE, INFO_MSG
+from config import INFO_MSG
 
 
 def build_tree(data, indent=0, is_last=True):
@@ -22,13 +21,6 @@ def build_tree(data, indent=0, is_last=True):
     return "\n".join(result)
 
 
-async def time(client, message):
-    await message.reply_text(
-        f"🔎 Time Zone: <spoiler>{TIME_ZONE}</spoiler>\n"
-        f"⏳ Now DateTime: <i>{datetime.datetime.now(TIME_ZONE).strftime('%m/%d/%Y, %H:%M:%S')}</i>"
-    )
-
-
 async def chat_id(client, message):
     data = message.chat.__dict__
     del data["photo"]
@@ -39,7 +31,17 @@ async def info(client, message):
     await message.reply_text(INFO_MSG)
 
 
+async def delete_this_msg(client, callback_query):
+    await callback_query.answer("ok")
+    await callback_query.message.delete()
+
+
+async def namayeshi(client, callback_query):
+    await callback_query.answer("این دکمه صرفا نمایشیه، کاربرد خاصی نداره")
+
+
 def register_utils_handlers(app):
-    app.on_message(filters.command("time"))(time)
     app.on_message(filters.command("chat_id"))(chat_id)
     app.on_message(filters.regex("قوانین"))(info)
+    app.on_callback_query(filters.regex("delete_this_msg"))(delete_this_msg)
+    app.on_callback_query(filters.regex("namayeshi"))(namayeshi)

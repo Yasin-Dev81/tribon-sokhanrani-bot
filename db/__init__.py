@@ -5,6 +5,10 @@ from .models import (
     Practice as PracticeModel,
     UserPractice as UserPracticeModel,
     UserType as UserTypeModel,
+    Correction as CorrectionModel,
+    MediaAcsess as MediaAcsessModel,
+    MediaType,
+    UserLevel,
 )
 
 
@@ -15,4 +19,8 @@ __all__ = (
     "PracticeModel",
     "UserPracticeModel",
     "UserTypeModel",
+    "CorrectionModel",
+    "MediaAcsessModel",
+    "MediaType",
+    "UserLevel"
 )

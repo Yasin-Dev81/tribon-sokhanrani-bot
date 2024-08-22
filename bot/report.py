@@ -68,21 +68,28 @@ class Report:
 
     @property
     def user_practices(self):
-        return self.session.query(
-            func.count(db.UserPracticeModel.id).label("user_practice_count"),
-            func.sum(
-                case((db.UserPracticeModel.teacher_id.is_(None), 1), else_=0)
-            ).label("user_practice_none_teacher_count"),
-            func.sum(
-                case((db.UserPracticeModel.teacher_id.is_not(None), 1), else_=0)
-            ).label("user_practice_done_teacher_count"),
-            func.sum(
-                case((db.UserPracticeModel.teacher_caption.is_(None), 1), else_=0)
-            ).label("user_practice_done_count"),
-            func.sum(
-                case((db.UserPracticeModel.teacher_caption.is_not(None), 1), else_=0)
-            ).label("user_practice_not_done_count"),
-        ).first()
+        return (
+            self.session.query(
+                func.count(db.UserPracticeModel.id).label("user_practice_count"),
+                func.sum(case((db.CorrectionModel.id.is_(None), 1), else_=0)).label(
+                    "user_practice_none_teacher_count"
+                ),
+                func.sum(case((db.CorrectionModel.id.is_not(None), 1), else_=0)).label(
+                    "user_practice_done_teacher_count"
+                ),
+                func.sum(
+                    case((db.CorrectionModel.caption.is_(None), 1), else_=0)
+                ).label("user_practice_done_count"),
+                func.sum(
+                    case((db.CorrectionModel.caption.is_not(None), 1), else_=0)
+                ).label("user_practice_not_done_count"),
+            )
+            .outerjoin(
+                db.CorrectionModel,
+                db.CorrectionModel.user_practice_id == db.UserPracticeModel.id,
+            )
+            .first()
+        )
 
     @property
     def top_users(self):
@@ -111,13 +118,13 @@ class Report:
             self.session.query(
                 db.TeacherModel.id,
                 db.TeacherModel.name,
-                func.count(db.UserPracticeModel.id).label("assignments_reviewed"),
+                func.count(db.CorrectionModel.id).label("assignments_reviewed"),
             )
             .join(
-                db.UserPracticeModel,
-                db.TeacherModel.id == db.UserPracticeModel.teacher_id,
+                db.CorrectionModel,
+                db.TeacherModel.id == db.CorrectionModel.teacher_id,
             )
-            .filter(db.UserPracticeModel.teacher_caption.isnot(None))
+            .filter(db.CorrectionModel.caption.isnot(None))
             .group_by(db.TeacherModel.id, db.TeacherModel.name)
             .order_by(desc("assignments_reviewed"))
             .limit(5)

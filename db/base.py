@@ -1,8 +1,8 @@
 from config import SQLALCHEMY_DATABASE_URL
 from sqlalchemy import create_engine, exc
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from contextlib import contextmanager
+
 
 IS_SQLITE = SQLALCHEMY_DATABASE_URL.startswith("sqlite")
 
@@ -19,11 +19,14 @@ else:
         max_overflow=30,
         pool_recycle=3600,
         pool_timeout=10,
-        pool_pre_ping=True,
+        # pool_pre_ping=True,
     )
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
+SessionLocal = sessionmaker(
+    # autocommit=False,
+    # autoflush=False,
+    bind=engine
+)
 
 
 @contextmanager

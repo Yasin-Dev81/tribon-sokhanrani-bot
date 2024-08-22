@@ -1,7 +1,7 @@
 services:
   db:
     container_name: mysql_db
-    image: mysql:9
+    image: mysql:8.0
     # restart: always
     command: --disable-log-bin
     # env_file: .env
@@ -10,29 +10,15 @@ services:
       MYSQL_DATABASE: tribon
       # MYSQL_USER: root
       MYSQL_ROOT_PASSWORD: "jojo9900"
+      TZ: "Asia/Tehran"
     volumes:
-      - ./var/tmp/mysql:/var/lib/mysql
+      - ./var/tmp5/mysql:/var/lib/mysql
     # networks:
     #   - main
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "mysqladmin",
-          "ping",
-          "-h",
-          "localhost",
-          "-u",
-          "root",
-          "jojo9900"
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   # tribon-bot:
   #   container_name: bot
-  #   image: yasindev/ah-score:6.8
+  #   image: yasindev/ah-score:db-test
   #   env_file: .env
   #   network_mode: host
   #   volumes:

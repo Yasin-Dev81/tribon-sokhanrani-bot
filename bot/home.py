@@ -1,6 +1,5 @@
 from pyrogram.types import ReplyKeyboardMarkup
 from pyrogram import filters
-import pyrostep
 
 from config import ADMINS_LIST_ID, BOT_VERSION, LEARN_URL
 import db
@@ -61,42 +60,50 @@ async def send_home_message_user(message, user_name="کاربر"):
     )
 
 
-async def back_home(client, callback_query):
-    # Acknowledge the callback query
-    # await callback_query.answer()
-    await pyrostep.unregister_steps(callback_query.from_user.id)
-    try:
-        await callback_query.message.delete()
-    except Exception:
-        pass
+class BackHome:
+    def __init__(self, app):
+        self.app = app
+        self.register_handlers()
 
-    with db.get_session() as session:
-        admin_st = callback_query.from_user.id in ADMINS_LIST_ID
-        if admin_st:
-            await send_home_message_admin(callback_query.message)
-            return
+    def register_handlers(self):
+        self.app.on_callback_query(filters.regex(r"back_home"))(self.back_home)
 
-        teahcer_st = (
-            session.query(db.TeacherModel)
-            .filter_by(tell_id=callback_query.from_user.id)
-            .first()
-        )
-        if teahcer_st:
-            await send_home_message_teacher(
-                callback_query.message, teacher_name=teahcer_st.name
+    async def back_home(self, client, callback_query):
+        # Acknowledge the callback query
+        # await callback_query.answer()
+        await self.app.unregister_steps(callback_query.from_user.id)
+        try:
+            await callback_query.message.delete()
+        except Exception:
+            pass
+
+        with db.get_session() as session:
+            admin_st = callback_query.from_user.id in ADMINS_LIST_ID
+            if admin_st:
+                await send_home_message_admin(callback_query.message)
+                return
+
+            teahcer_st = (
+                session.query(db.TeacherModel)
+                .filter_by(tell_id=callback_query.from_user.id)
+                .first()
             )
-            return
-        user = (
-            session.query(db.UserModel)
-            .filter_by(tell_id=callback_query.from_user.id)
-            .first()
-        )
-        if user:
-            await send_home_message_user(callback_query.message, user.name)
-            return
+            if teahcer_st:
+                await send_home_message_teacher(
+                    callback_query.message, teacher_name=teahcer_st.name
+                )
+                return
+            user = (
+                session.query(db.UserModel)
+                .filter_by(tell_id=callback_query.from_user.id)
+                .first()
+            )
+            if user:
+                await send_home_message_user(callback_query.message, user.name)
+                return
 
-    await callback_query.answer("error!")
+        await callback_query.answer("error!")
 
 
 def register_home_handlers(app):
-    app.on_callback_query(filters.regex(r"back_home"))(back_home)
+    BackHome(app)

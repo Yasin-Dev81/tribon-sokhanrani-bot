@@ -85,6 +85,7 @@ class BaseUserPractice:
                         ),
                     ).label("status"),
                     db.PracticeModel.end_date.label("dd_line"),
+                    db.UserModel.name.label("user_name"),
                 )
                 .join(
                     db.PracticeModel,
@@ -111,6 +112,7 @@ class BaseUserPractice:
                     db.CorrectionModel.media_type,
                     db.PracticeModel.end_date,
                     db.CorrectionModel.id,
+                    db.UserModel.name,
                 )
             ).first()
             return query
@@ -155,11 +157,10 @@ class BaseUserPractice:
             caption = (
                 f"📌 عنوان: {user_practice.title}\n🔖 متن سوال: {user_practice.caption}\n"
                 f"◾️ ددلاین تمرین: {JalaliDateTime(user_practice.dd_line).strftime(DATE_TIME_FMT, locale='fa')}\n"
-                f"◾️ کپشن کاربر: {user_practice.user_caption or 'بدون کپشن!'}"
+                f"◾️ کپشن کاربر: {user_practice.user_caption or 'بدون کپشن!'}\n"
+                f"◾️ نام کاربر: {user_practice.user_name}\n"
                 "➖➖➖➖➖➖➖➖➖\n"
-                "<blockquote expandable>\n"
-                f"\n📊 وضعیت تمرین: {correction}!"
-                "</blockquote>"
+                f"<blockquote expandable>📊 وضعیت تمرین: {correction}</blockquote>"
             )
 
             media_reply_methods = {
@@ -284,7 +285,7 @@ class BaseUserPractice:
         media_types = [i.media_type.value for i in media_acsess]
         str_media_types = "\n✔️ ".join(media_types)
         await callback_query.message.reply_text(
-            f"📌 تایپ‌های قابل قبول:\n✔️ {str_media_types}\n{WARN_MSG}",
+            f"📌 تایپ‌های مدیای قابل قبول:\n✔️ {str_media_types}\n{WARN_MSG}",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("Cancel", callback_data="back_home")]]
             ),
@@ -372,6 +373,12 @@ class BaseUserPractice:
                     # asyncio.create_task(
                     #     self.send_user_correction_notification(client, user_practice_id)
                     # )
+                    if not media_type == db.MediaType.VIDEO_NOTE:
+                        asyncio.create_task(
+                            self.update_group_msg_caption(
+                                forwarded_message, user_practice_id
+                            )
+                        )
                     try:
                         await callback_query.message.delete()
                     except Exception:
@@ -501,6 +508,34 @@ class BaseUserPractice:
 
         await callback_query.message.delete()
         await callback_query.message.reply_text("error!")
+
+    @staticmethod
+    async def update_group_msg_caption(msg, user_practice_id):
+        with db.get_session() as session:
+            correction = (
+                session.query(
+                    db.UserPracticeModel.id,
+                    db.CorrectionModel.id,
+                    db.TeacherModel.name,
+                    db.CorrectionModel.user_practice_id,
+                )
+                .filter(db.UserPracticeModel.id == user_practice_id)
+                .join(
+                    db.CorrectionModel,
+                    db.UserPracticeModel.id == db.CorrectionModel.user_practice_id,
+                )
+                .join(
+                    db.TeacherModel, db.TeacherModel.id == db.CorrectionModel.teacher_id
+                )
+                .first()
+            )
+            if correction:
+                await msg.edit_text(
+                    f"user-practice: {user_practice_id}\n"
+                    f"correction: {correction.id}\n"
+                    f"teacher-name: {correction.name}\n"
+                    f"practice-id: {correction.user_practice_id}"
+                )
 
 
 class BasePractice(BaseUserPractice):

@@ -1,5 +1,7 @@
 from pyrogram import filters
 from sqlalchemy import func, and_, case, desc
+from sqlalchemy.sql.expression import over
+from collections import defaultdict
 import datetime
 
 from config import ADMINS_LIST_ID, TIME_ZONE
@@ -26,7 +28,7 @@ def is_teacher(filter, client, update):
 
 class Report:
     current_time = datetime.datetime.now(TIME_ZONE)
-    emojies = ["🥇", "🥈", "🥉", " 4. ", " 5. "]
+    emojies = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
 
     def __init__(self) -> None:
         with db.get_session() as session:
@@ -93,23 +95,50 @@ class Report:
 
     @property
     def top_users(self):
-        top_users = (
+        subquery = (
             self.session.query(
                 db.UserModel.id,
                 db.UserModel.name,
+                db.UserModel.user_type_id,
                 func.count(db.UserPracticeModel.id).label("assignments_delivered"),
+                over(
+                    func.rank(),
+                    order_by=desc(func.count(db.UserPracticeModel.id)),
+                    partition_by=db.UserModel.user_type_id,
+                ).label("rank"),
             )
             .join(db.UserPracticeModel, db.UserModel.id == db.UserPracticeModel.user_id)
-            .group_by(db.UserModel.id, db.UserModel.name)
-            .order_by(desc("assignments_delivered"))
-            .limit(3)
+            .group_by(db.UserModel.id, db.UserModel.user_type_id)
+            .subquery()
+        )
+
+        top_users = (
+            self.session.query(
+                subquery.c.name,
+                subquery.c.assignments_delivered,
+                db.UserTypeModel.name.label("type_name"),
+            )
+            .filter(subquery.c.rank <= 3)
+            .join(db.UserTypeModel, db.UserTypeModel.id == subquery.c.user_type_id)
             .all()
         )
 
-        top_user_capt = ""
-        # for i, user in enumerate(top_users):
-        for emj, user in zip(self.emojies, top_users):
-            top_user_capt += f"  {emj} <i>{user.name}</i> | <code>{user.assignments_delivered}</code>\n"
+        users_by_type = defaultdict(list)
+        for user in top_users:
+            users_by_type[user.type_name].append(
+                {"name": user.name, "assignments_delivered": user.assignments_delivered}
+            )
+
+        top_user_capt = "".join(
+            f"◾️ <b>{type_name}</b>\n<blockquote expandable>"
+            + "".join(
+                f"  {emj} <i>{user['name']}</i> | <code>{user['assignments_delivered']}</code>\n"
+                for emj, user in zip(self.emojies, users_by_type[type_name])
+            )
+            + "</blockquote>"
+            for type_name in users_by_type
+        )
+
         return top_user_capt
 
     @property
@@ -127,7 +156,7 @@ class Report:
             .filter(db.CorrectionModel.caption.isnot(None))
             .group_by(db.TeacherModel.id, db.TeacherModel.name)
             .order_by(desc("assignments_reviewed"))
-            .limit(5)
+            .limit(10)
             .all()
         )
 
@@ -140,6 +169,7 @@ class Report:
 
 async def admin_report(client, message):
     data = Report()
+    # data.top_users
 
     await message.reply_text(
         "🔷 <b>یوزرها</b>\n"
@@ -148,14 +178,16 @@ async def admin_report(client, message):
         "➖➖➖➖➖➖➖➖➖\n"
         "▫️ بهترین یوزرها از نظر تحویل تکلیف:\n"
         f"{data.top_users}"
-        "➖➖➖➖➖➖➖➖➖\n"
+    )
+    await message.reply_text(
         "🔶 <b>معلم‌ها</b>\n"
         f"🔸 تعداد معلم ثبت شده: {data.teahcers.teachers_count}\n"
         f"🔸 تعداد معلم فعال: {data.teahcers.active_teachers_count}\n"
         "➖➖➖➖➖➖➖➖➖\n"
         "▫️ بهترین معلم‌ها از نظر تحلیل تکلیف:\n"
-        f"{data.top_teachers}"
-        "➖➖➖➖➖➖➖➖➖\n"
+        f"<blockquote expandable>{data.top_teachers}</blockquote>"
+    )
+    await message.reply_text(
         "🔷 <b>تمارین</b>\n"
         f"🔹 تعداد تمارین ثبت شده: {data.practices.practice_count}\n"
         f"🔹 تعداد تمارین فعال: {data.practices.active_practice_count or 0}\n"

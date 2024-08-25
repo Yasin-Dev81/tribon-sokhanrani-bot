@@ -170,8 +170,10 @@ class BasePractice:
                 correction = f"تحلیل سخنرانی شده.\n◾️ کپشن منتور: {user_practice.teacher_caption}"
 
             update_user_practice = ""
-            if not user_practice.datetime_created==user_practice.datetime_modified:
-                update_user_practice = '◾️ تاریخ ویرایش: %s \n'%JalaliDateTime(user_practice.datetime_modified).strftime(DATE_TIME_FMT, locale='fa')
+            if not user_practice.datetime_created == user_practice.datetime_modified:
+                update_user_practice = "◾️ تاریخ ویرایش: %s \n" % JalaliDateTime(
+                    user_practice.datetime_modified
+                ).strftime(DATE_TIME_FMT, locale="fa")
 
             caption = (
                 f"📌 عنوان: {user_practice.title}\n🔖 متن سوال: {user_practice.caption}\n"
@@ -181,7 +183,7 @@ class BasePractice:
                 f"◾️ تاریخ آپلود: {JalaliDateTime(user_practice.datetime_created).strftime(DATE_TIME_FMT, locale='fa')} \n"
                 f"{update_user_practice}"
                 "➖➖➖➖➖➖➖➖➖\n"
-                "<blockquote expandable>\n"
+                "<blockquote expandable>"
                 f"📊 وضعیت تمرین: {correction}"
                 "</blockquote>"
             )
@@ -397,6 +399,12 @@ class BasePractice:
                     asyncio.create_task(
                         self.send_admin_upload_notification(client, user_practice_id)
                     )
+                    if not media_type == db.MediaType.VIDEO_NOTE:
+                        asyncio.create_task(
+                            self.update_group_msg_caption(
+                                forwarded_message, user_practice_id
+                            )
+                        )
                     try:
                         await callback_query.message.delete()
                     except Exception:
@@ -616,6 +624,12 @@ class BasePractice:
                     )
 
                     await answer.reply_text("تکلیف با موفقیت ثبت شد.")
+                    if not media_type == db.MediaType.VIDEO_NOTE:
+                        asyncio.create_task(
+                            self.update_group_msg_caption(
+                                forwarded_message, user_practice_id
+                            )
+                        )
                     try:
                         await callback_query.message.delete()
                     except Exception:
@@ -695,6 +709,26 @@ class BasePractice:
                 )
             ).first()
             return query.status
+
+    @staticmethod
+    async def update_group_msg_caption(msg, user_practice_id):
+        with db.get_session() as session:
+            user_practice = (
+                session.query(
+                    db.UserPracticeModel.id,
+                    db.UserModel.name,
+                    db.UserPracticeModel.practice_id,
+                )
+                .filter(db.UserPracticeModel.id == user_practice_id)
+                .join(db.UserModel, db.UserModel.id == db.UserPracticeModel.user_id)
+                .first()
+            )
+            if user_practice:
+                await msg.edit_text(
+                    f"user-practice: {user_practice.id}\n"
+                    f"user-name: {user_practice.name}\n"
+                    f"practice-id: {user_practice.practice_id}"
+                )
 
 
 class ActivePractice(BasePractice):
@@ -899,7 +933,12 @@ class CorrectedPractice(BasePractice):
                     db.PracticeModel,
                     db.PracticeModel.id == db.UserPracticeModel.practice_id,
                 )
-                .filter(db.UserModel.tell_id == user_tell_id)
+                .filter(
+                    and_(
+                        db.UserModel.tell_id == user_tell_id,
+                        db.CorrectionModel.caption.is_not(None),
+                    )
+                )
             ).all()
 
             return query

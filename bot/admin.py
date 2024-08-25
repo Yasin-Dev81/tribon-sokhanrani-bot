@@ -16,6 +16,7 @@ from .pagination import (
     user_practice_paginated_keyboard,
     select_teacher_paginated_keyboard,
 )
+from utils import generate_progress_bar
 import db
 
 
@@ -66,6 +67,16 @@ class Practice:
             filters.regex(r"practice_send_teachers_notif_(\d+)")
             & filters.user(ADMINS_LIST_ID)
         )(self.send_teachers_notif)
+        self.app.on_callback_query(
+            filters.regex(r"practice_edit_(\d+)") & filters.user(ADMINS_LIST_ID)
+        )(self.select_type)
+        self.app.on_callback_query(
+            filters.regex(r"practice_select_type_edit_(\d+)_(\d+)")
+            & filters.user(ADMINS_LIST_ID)
+        )(self.reply)
+        self.app.on_callback_query(
+            filters.regex(r"practice_time_edit_(\d+)") & filters.user(ADMINS_LIST_ID)
+        )(self.time_edit)
 
     # تعریف تمرین جدید
     async def add(self, client, message):
@@ -535,6 +546,156 @@ class Practice:
         except Exception:
             await callback_query.message.reply_text("error!")
 
+    async def select_type(self, client, callback_query):
+        practice_id = int(callback_query.data.split("_")[-1])
+        await callback_query.message.edit_reply_markup(
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "عنوان",
+                            callback_data=f"practice_select_type_edit_{practice_id}_0",
+                        ),
+                        InlineKeyboardButton(
+                            "متن سوال",
+                            callback_data=f"practice_select_type_edit_{practice_id}_1",
+                        ),
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "تایپ کاربران سوال",
+                            callback_data=f"practice_select_type_edit_{practice_id}_2",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "مدیاهای یوزر",
+                            callback_data=f"user_media_acsess_managment_{practice_id}_0",
+                        ),
+                        InlineKeyboardButton(
+                            "مدیاهای منتور",
+                            callback_data=f"teacher_media_acsess_managment_{practice_id}_0",
+                        ),
+                    ],
+                    [InlineKeyboardButton("exit!", callback_data="back_home")],
+                ]
+            ),
+        )
+
+    async def reply(self, client, callback_query):
+        # await callback_query.message.delete()
+        match = re.search(r"practice_select_type_edit_(\d+)_(\d+)", callback_query.data)
+
+        if not match:
+            await callback_query.message.delete()
+            return
+
+        practice_id = int(match.group(1))
+        type = int(match.group(2))
+
+        await callback_query.message.delete()
+
+        if type == 2:
+            with db.get_session() as session:
+                await callback_query.message.reply_text(
+                    f"آی‌دی تمرین: {practice_id}\n\n" "لطفا نوع یوزر را انتخاب کنید:",
+                    reply_markup=InlineKeyboardMarkup(
+                        [
+                            [
+                                InlineKeyboardButton(
+                                    i.name,
+                                    callback_data=f"admin_practice_set_type_{i.id}_{practice_id}",
+                                )
+                                for i in session.query(db.UserTypeModel).all()
+                            ],
+                            [InlineKeyboardButton("exit!", callback_data="back_home")],
+                        ]
+                    ),
+                )
+            return
+
+        await callback_query.answer("ویرایش موردنظر را ارسال کنید.")
+        await callback_query.message.reply_text(
+            "ویرایش موردنظر را ارسال کنید.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("exit!", callback_data="back_home")]],
+            ),
+        )
+
+        try:
+            answer = await pyrostep.wait_for(
+                callback_query.from_user.id, timeout=TIME_OUT * 60
+            )
+
+            with db.get_session() as session:
+                practice = session.query(db.PracticeModel).get(practice_id)
+                if practice:
+                    if type == 0:
+                        practice.title = answer.text
+                    elif type == 1:
+                        practice.caption = answer.text
+                    session.commit()
+                    await answer.reply_text("تمرین با موفقیت آپدیت شد.")
+                else:
+                    await answer.reply_text("این تمرین وجود ندارد!")
+
+        except TimeoutError:
+            await callback_query.message.reply_text("مهلت زمانی پاسخ تمام شد!")
+        except asyncio.CancelledError:
+            await callback_query.message.reply_text("کنسل شد!")
+        except Exception:
+            await callback_query.message.reply_text("error!")
+
+    async def time_edit(self, client, callback_query):
+        # await callback_query.message.delete()
+        match = re.search(r"practice_time_edit_(\d+)", callback_query.data)
+
+        if not match:
+            await callback_query.message.delete()
+            return
+
+        practice_id = int(match.group(1))
+
+        await callback_query.message.delete()
+
+        await callback_query.answer("تعداد روز تمدید موردنظر را ارسال کنید.")
+        await callback_query.message.reply_text(
+            "تعداد روز تمدید موردنظر را ارسال کنید.\n"
+            "حتما بصورت عددی صحیح (مثبت یا منفی) وارد کنید.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("exit!", callback_data="back_home")]],
+            ),
+        )
+
+        try:
+            answer = await pyrostep.wait_for(
+                callback_query.from_user.id, timeout=TIME_OUT * 60
+            )
+            days = int(answer.text)
+
+            with db.get_session() as session:
+                practice = session.query(db.PracticeModel).get(practice_id)
+                if practice:
+                    if days > 0:
+                        practice.end_date = practice.end_date + datetime.timedelta(
+                            days=days
+                        )
+                    elif days < 0:
+                        practice.end_date = practice.end_date - datetime.timedelta(
+                            days=days
+                        )
+                    session.commit()
+                    await answer.reply_text("تمرین با موفقیت تمدید شد.")
+                else:
+                    await answer.reply_text("این تمرین وجود ندارد!")
+
+        except TimeoutError:
+            await callback_query.message.reply_text("مهلت زمانی پاسخ تمام شد!")
+        except asyncio.CancelledError:
+            await callback_query.message.reply_text("کنسل شد!")
+        except Exception:
+            await callback_query.message.reply_text("error!")
+
 
 class UserPracticeUtils:
     def __init__(self, app) -> None:
@@ -772,7 +933,7 @@ class BaseUserPractice:
                     db.CorrectionModel.user_practice_id == db.UserPracticeModel.id,
                 )
                 .filter(db.UserPracticeModel.id == pk)
-                .join(
+                .outerjoin(
                     db.TeacherModel, db.TeacherModel.id == db.CorrectionModel.teacher_id
                 )
                 .group_by(
@@ -908,21 +1069,19 @@ class BaseUserPractice:
             )
             old_teacher = "\n▫️ ".join(old_teacher)
             update_user_practice = ""
-            if not user_practice.datetime_created==user_practice.datetime_modified:
-                update_user_practice = '◾️ تاریخ ویرایش: %s \n'%JalaliDateTime(user_practice.datetime_modified).strftime(DATE_TIME_FMT, locale='fa')
+            if not user_practice.datetime_created == user_practice.datetime_modified:
+                update_user_practice = "◾️ تاریخ ویرایش: %s \n" % JalaliDateTime(
+                    user_practice.datetime_modified
+                ).strftime(DATE_TIME_FMT, locale="fa")
             caption = (
                 f"📌 عنوان: {user_practice.title}\n🔖 متن سوال: {user_practice.caption}\n"
                 f"◾️ کپشن کاربر: {user_practice.user_caption or 'بدون کپشن!'}\n"
                 f"◾️ تاریخ پاسخ: {JalaliDateTime(user_practice.datetime_created).strftime(DATE_TIME_FMT, locale='fa')} \n"
                 f"{update_user_practice}"
                 "➖➖➖➖➖➖➖➖➖\n"
-                "<blockquote expandable>\n"
-                "منتورهای سابق:\n"
-                f"▫️ {old_teacher}\n"
-                "</blockquote>"
-                "<blockquote expandable>\n"
-                f"📊 وضعیت تمرین: {correction}!"
-                "</blockquote>"
+                "<blockquote expandable>منتورهای سابق:\n"
+                f"▫️ {old_teacher}</blockquote>\n"
+                f"<blockquote expandable>📊 وضعیت تمرین: {correction}</blockquote>"
             )
 
             media_reply_methods = {
@@ -1214,12 +1373,14 @@ class BasePractice(BaseUserPractice):
         # db
         practice = self.report_practice(pk=practice_id)
 
-        await callback_query.message.delete()
+        # await callback_query.message.delete()
 
-        await callback_query.message.reply_text(
+        await callback_query.message.edit_text(
             f"📌 عنوان: {practice.title}\n🔖 متن سوال: {practice.caption}\n"
             f"◾️ ددلاین تمرین: {JalaliDateTime(practice.end_date).strftime(DATE_TIME_FMT, locale='fa')}\n"
-            f"◾️ تایپ یوزرهای سوال: {practice.user_type_name}\n",
+            f"◾️ تایپ یوزرهای سوال: {practice.user_type_name}\n"
+        )
+        await callback_query.message.edit_reply_markup(
             reply_markup=InlineKeyboardMarkup(
                 [
                     [
@@ -1233,6 +1394,16 @@ class BasePractice(BaseUserPractice):
                             "ارسال نوتیف به معلمان تمام نکرده",
                             callback_data=f"practice_send_teachers_notif_{practice_id}",
                         )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "ویرایش",
+                            callback_data=f"practice_edit_{practice_id}",
+                        ),
+                        InlineKeyboardButton(
+                            "تمدید",
+                            callback_data=f"practice_time_edit_{practice_id}",
+                        ),
                     ],
                     [
                         InlineKeyboardButton(
@@ -1831,6 +2002,10 @@ class Users:
             filters.regex(r"admin_users_set_type_(\d+)_(\d+)")
             & filters.user(ADMINS_LIST_ID)
         )(self.set_type)
+        self.app.on_callback_query(
+            filters.regex(r"admin_user_correction_list_(\d+)_(\d+)")
+            & filters.user(ADMINS_LIST_ID)
+        )(self.correction_list)
 
     @property
     def users(self):
@@ -1870,59 +2045,34 @@ class Users:
     @staticmethod
     def user(pk):
         with db.get_session() as session:
-            # total_count_subquery = (
-            #     session.query(func.count(db.PracticeModel.id))
-            #     .join(
-            #         db.UserModel,
-            #         db.UserModel.user_type_id == db.PracticeModel.user_type_id,
-            #     )
-            #     .filter(db.UserModel.id == pk)
-            #     .scalar_subquery()
-            # )
-
-            # user_practice_count_subquery = (
-            #     session.query(func.count(db.UserPracticeModel.id))
-            #     .filter(db.UserPracticeModel.user_id == pk)
-            #     .scalar_subquery()
-            # )
-
-            # correction_count_subquery = (
-            #     session.query(func.count(db.UserPracticeModel.id))
-            #     .filter(
-            #         db.UserPracticeModel.user_id == pk,
-            #         db.UserPracticeModel.teacher_caption.is_not(None),
-            #     )
-            #     .scalar_subquery()
-            # )
-
-            # not_correction_count_subquery = (
-            #     session.query(func.count(db.UserPracticeModel.id))
-            #     .filter(
-            #         db.UserPracticeModel.user_id == pk,
-            #         db.UserPracticeModel.teacher_caption.is_(None),
-            #     )
-            #     .scalar_subquery()
-            # )
             user_type_subquery = (
                 session.query(db.UserTypeModel.name)
                 .filter(db.UserModel.user_type_id == db.UserTypeModel.id)
                 .scalar_subquery()
             )
-
-            result = (
+            user = (
                 session.query(
                     db.UserModel.name,
                     db.UserModel.phone_number,
                     user_type_subquery.label("user_type_name"),
-                    # total_count_subquery.label("total_count_practice"),
-                    # user_practice_count_subquery.label("total_count_user_practice"),
-                    # correction_count_subquery.label("total_count_correction"),
-                    # not_correction_count_subquery.label("total_count_not_correction"),
+                    func.count(db.UserPracticeModel.id).label("user_practice_count"),
+                    func.count(func.nullif(db.CorrectionModel.id, None)).label(
+                        "corrected_user_practice_count"
+                    ),
+                )
+                .outerjoin(
+                    db.UserPracticeModel,
+                    db.UserModel.id == db.UserPracticeModel.user_id,
                 )
                 .filter(db.UserModel.id == pk)
+                .outerjoin(
+                    db.CorrectionModel,
+                    db.CorrectionModel.user_practice_id == db.UserPracticeModel.id,
+                )
+                .group_by(db.UserModel.id)
                 .first()
             )
-            return result
+            return user
 
     async def select(self, client, callback_query):
         user_id = int(callback_query.data.split("_")[-1])
@@ -1932,15 +2082,18 @@ class Users:
         await callback_query.message.reply_text(
             f"🆔 #{user_id}\n📞 شماره: \n{user.phone_number}"
             f"\n👤 نام: {user.name or 'Not set!'}\n"
-            f"◾️ نوع یوزر: {user.user_type_name}\n",
-            # "➖➖➖➖➖➖➖➖➖\n"
-            # f"◾️ تعداد کل تمارین: {user.total_count_practice}\n"
-            # f"◾️ تعداد تکالیف تحویل داده شده: {user.total_count_user_practice}\n"
-            # f"◾️ تعداد تکالیف تحویل داده نشده: {user.total_count_practice - user.total_count_user_practice}\n"
-            # f"◾️ تعداد تکالیف تصحیح شده: {user.total_count_correction}\n"
-            # f"◾️ تعداد تکالیف تصحیح نشده: {user.total_count_not_correction}",
+            f"◾️ نوع یوزر: {user.user_type_name}\n"
+            "➖➖➖➖➖➖➖➖➖\n"
+            f"▫️ تعداد تکلیف تحویل داده شده: {user.user_practice_count}\n"
+            f"▫️ تعداد تکلیف تصحیح شده: {user.corrected_user_practice_count}",
             reply_markup=InlineKeyboardMarkup(
                 [
+                    [
+                        InlineKeyboardButton(
+                            "تمامی تکالیف",
+                            callback_data=f"admin_user_correction_list_{user_id}_0",
+                        ),
+                    ],
                     [
                         InlineKeyboardButton(
                             "🗑 حذف یوزر",
@@ -1951,14 +2104,12 @@ class Users:
                             callback_data=f"admin_users_notif_{user_id}",
                         ),
                     ],
-                ]
-                + [
                     [
                         InlineKeyboardButton(
                             "🔙 بازگشت", callback_data="admin_users_list_0"
                         ),
                         InlineKeyboardButton("exit!", callback_data="back_home"),
-                    ]
+                    ],
                 ]
             ),
         )
@@ -2160,6 +2311,65 @@ class Users:
             else:
                 await callback_query.message.reply_text("error!")
 
+    @staticmethod
+    def user_practices(user_id):
+        with db.get_session() as session:
+            return (
+                session.query(
+                    db.UserPracticeModel.id,
+                    (db.PracticeModel.title + " | " + db.UserModel.name).label("title"),
+                )
+                .filter(db.UserPracticeModel.user_id == user_id)
+                .join(db.UserModel, db.UserModel.id == db.UserPracticeModel.user_id)
+                .join(
+                    db.PracticeModel,
+                    db.PracticeModel.id == db.UserPracticeModel.practice_id,
+                )
+                .all()
+            )
+
+    async def correction_list(self, client, callback_query):
+        match = re.search(
+            r"admin_user_correction_list_(\d+)_(\d+)",
+            callback_query.data,
+        )
+        if not match:
+            return
+
+        user_id = int(match.group(1))
+        page = int(match.group(2))
+
+        user_practices = self.user_practices(user_id)
+
+        if not user_practices:
+            await callback_query.answer("هیچ تکلیفی موجود نیست!")
+            return
+
+        await callback_query.answer("لطفا یک تکلیف انتخاب کنید")
+
+        # if page == 0:
+        #     await callback_query.message.reply_text(
+        #         "لطفا یک منتور انتخاب کنید:",
+        #         reply_markup=select_teacher_paginated_keyboard(
+        #             teachers,
+        #             0,
+        #             f"admin_{self.type}_practice_user_practice_list",
+        #             f"admin_{self.type}_user_practice_set_teahcer",
+        #             user_practice_id=user_practice_id,
+        #             back_query="delete_this_msg",
+        #         ),
+        #     )
+        #     return
+
+        await callback_query.message.edit_reply_markup(
+            reply_markup=get_paginated_keyboard(
+                user_practices,
+                page,
+                f"admin_teahcer_correction_list_{user_id}",
+                "admin_all_practice_user_practice_select",
+            ),
+        )
+
 
 class Teachers:
     def __init__(self, app):
@@ -2167,7 +2377,7 @@ class Teachers:
         self.register_handlers()
 
     def register_handlers(self):
-        self.app.on_message(filters.regex("معلم‌ها") & filters.user(ADMINS_LIST_ID))(
+        self.app.on_message(filters.regex("منتورها") & filters.user(ADMINS_LIST_ID))(
             self.list
         )
         self.app.on_callback_query(
@@ -2187,8 +2397,16 @@ class Teachers:
             filters.regex(r"admin_teachers_delete_(\d+)") & filters.user(ADMINS_LIST_ID)
         )(self.delete)
         self.app.on_message(
-            filters.regex("اضافه کردن معلم جدید") & filters.user(ADMINS_LIST_ID)
+            filters.regex("اضافه کردن منتور جدید") & filters.user(ADMINS_LIST_ID)
         )(self.add)
+        self.app.on_callback_query(
+            filters.regex(r"admin_teahcer_correction_list_(\d+)_(\d+)")
+            & filters.user(ADMINS_LIST_ID)
+        )(self.correction_list)
+        self.app.on_callback_query(
+            filters.regex(r"admin_teahcer_not_corrected_list_(\d+)_(\d+)")
+            & filters.user(ADMINS_LIST_ID)
+        )(self.not_corrected_list)
 
     @property
     def teachers(self):
@@ -2228,46 +2446,25 @@ class Teachers:
     @staticmethod
     def user(pk):
         with db.get_session() as session:
-            # total_count_subquery = (
-            #     session.query(func.count(db.UserPracticeModel.id))
-            #     .filter(db.UserPracticeModel.teacher_id == pk)
-            #     .scalar_subquery()
-            # )
-
-            # teacher_caption_count_subquery = (
-            #     session.query(func.count(db.UserPracticeModel.id))
-            #     .filter(
-            #         db.UserPracticeModel.teacher_id == pk,
-            #         db.UserPracticeModel.teacher_caption.isnot(None),
-            #     )
-            #     .scalar_subquery()
-            # )
-
-            # teacher_caption_none_count_subquery = (
-            #     session.query(func.count(db.UserPracticeModel.id))
-            #     .filter(
-            #         db.UserPracticeModel.teacher_id == pk,
-            #         db.UserPracticeModel.teacher_caption.is_(None),
-            #     )
-            #     .scalar_subquery()
-            # )
-
-            result = (
+            teacher = (
                 session.query(
+                    db.TeacherModel.id,
                     db.TeacherModel.name,
                     db.TeacherModel.phone_number,
-                    # total_count_subquery.label("total_count_user_practice"),
-                    # teacher_caption_count_subquery.label(
-                    #     "count_correction_user_practice"
-                    # ),
-                    # teacher_caption_none_count_subquery.label(
-                    #     "count_not_correction_user_practice"
-                    # ),
+                    func.count(db.CorrectionModel.id).label("user_practice_count"),
+                    func.count(func.nullif(db.CorrectionModel.caption, None)).label(
+                        "corrected_user_practice_count"
+                    ),
+                )
+                .outerjoin(
+                    db.CorrectionModel,
+                    db.CorrectionModel.teacher_id == db.TeacherModel.id,
                 )
                 .filter(db.TeacherModel.id == pk)
+                .group_by(db.TeacherModel.id)
                 .first()
             )
-            return result
+            return teacher
 
     async def select(self, client, callback_query):
         user_id = int(callback_query.data.split("_")[-1])
@@ -2276,13 +2473,24 @@ class Teachers:
 
         await callback_query.message.reply_text(
             f"🆔 #{user_id}\n👤 نام معلم: {user.name}\n"
-            f"📞 شماره معلم: \n{user.phone_number}\n",
-            # "➖➖➖➖➖➖➖➖➖\n"
-            # f"◾️ تعداد تمارین تخصیص داده شده: {user.total_count_user_practice}\n"
-            # f"◾️ تعداد تمارین تحیل شده: {user.count_correction_user_practice}\n"
-            # f"◾️ تعداد تمارین تحلیل نشده: {user.count_not_correction_user_practice}",
+            f"📞 شماره معلم: \n{user.phone_number}\n"
+            "➖➖➖➖➖➖➖➖➖\n"
+            f"{generate_progress_bar(user.corrected_user_practice_count/user.user_practice_count)}\n<blockquote expandable>"
+            f"▫️ تعداد تکلیف تخصیص داده شده: {user.user_practice_count}\n"
+            f"▫️ تعداد تکلیف تصحیح شده: {user.corrected_user_practice_count}\n"
+            f"▫️ تعداد تکلیف تصحیح نشده: {user.user_practice_count - user.corrected_user_practice_count}</blockquote>",
             reply_markup=InlineKeyboardMarkup(
                 [
+                    [
+                        InlineKeyboardButton(
+                            "تمامی تکالیف",
+                            callback_data=f"admin_teahcer_correction_list_{user_id}_0",
+                        ),
+                        InlineKeyboardButton(
+                            "تکالیف تحلیل نشده",
+                            callback_data=f"admin_teahcer_not_corrected_list_{user_id}_0",
+                        ),
+                    ],
                     [
                         InlineKeyboardButton(
                             "🗑 حذف معلم",
@@ -2293,14 +2501,12 @@ class Teachers:
                             callback_data=f"admin_teachers_notif_{user_id}",
                         ),
                     ],
-                ]
-                + [
                     [
                         InlineKeyboardButton(
                             "🔙 بازگشت", callback_data="admin_teachers_list_0"
                         ),
                         InlineKeyboardButton("exit!", callback_data="back_home"),
-                    ]
+                    ],
                 ]
             ),
         )
@@ -2451,6 +2657,200 @@ class Teachers:
             session.add(new_teacher)
             session.commit()
             return new_teacher.id
+
+    @staticmethod
+    def user_practices(teacher_id):
+        with db.get_session() as session:
+            return (
+                session.query(
+                    db.CorrectionModel.id.label("correction_id"),
+                    db.UserPracticeModel.id,
+                    (db.PracticeModel.title + " | " + db.UserModel.name).label("title"),
+                )
+                .filter(db.CorrectionModel.teacher_id == teacher_id)
+                .join(
+                    db.UserPracticeModel,
+                    db.UserPracticeModel.id == db.CorrectionModel.user_practice_id,
+                )
+                .join(db.UserModel, db.UserModel.id == db.UserPracticeModel.user_id)
+                .join(
+                    db.PracticeModel,
+                    db.PracticeModel.id == db.UserPracticeModel.practice_id,
+                )
+                .all()
+            )
+
+    async def correction_list(self, client, callback_query):
+        match = re.search(
+            r"admin_teahcer_correction_list_(\d+)_(\d+)",
+            callback_query.data,
+        )
+        if not match:
+            return
+
+        teacher_id = int(match.group(1))
+        page = int(match.group(2))
+
+        user_practices = self.user_practices(teacher_id)
+
+        if not user_practices:
+            await callback_query.answer("هیچ تکلیفی موجود نیست!")
+            return
+
+        await callback_query.answer("لطفا یک تکلیف انتخاب کنید")
+
+        # if page == 0:
+        #     await callback_query.message.reply_text(
+        #         "لطفا یک منتور انتخاب کنید:",
+        #         reply_markup=select_teacher_paginated_keyboard(
+        #             teachers,
+        #             0,
+        #             f"admin_{self.type}_practice_user_practice_list",
+        #             f"admin_{self.type}_user_practice_set_teahcer",
+        #             user_practice_id=user_practice_id,
+        #             back_query="delete_this_msg",
+        #         ),
+        #     )
+        #     return
+
+        await callback_query.message.edit_reply_markup(
+            reply_markup=get_paginated_keyboard(
+                user_practices,
+                page,
+                f"admin_teahcer_correction_list_{teacher_id}",
+                "admin_all_practice_user_practice_select",
+            ),
+        )
+
+    @staticmethod
+    def not_corrected_db(teacher_id):
+        with db.get_session() as session:
+            return (
+                session.query(
+                    db.CorrectionModel.id.label("correction_id"),
+                    db.UserPracticeModel.id,
+                    (db.PracticeModel.title + " | " + db.UserModel.name).label("title"),
+                )
+                .filter(
+                    and_(
+                        db.CorrectionModel.teacher_id == teacher_id,
+                        db.CorrectionModel.caption.is_(None),
+                    )
+                )
+                .join(
+                    db.UserPracticeModel,
+                    db.UserPracticeModel.id == db.CorrectionModel.user_practice_id,
+                )
+                .join(db.UserModel, db.UserModel.id == db.UserPracticeModel.user_id)
+                .join(
+                    db.PracticeModel,
+                    db.PracticeModel.id == db.UserPracticeModel.practice_id,
+                )
+                .all()
+            )
+
+    async def not_corrected_list(self, client, callback_query):
+        match = re.search(
+            r"admin_teahcer_not_corrected_list_(\d+)_(\d+)",
+            callback_query.data,
+        )
+        if not match:
+            return
+
+        teacher_id = int(match.group(1))
+        page = int(match.group(2))
+
+        user_practices = self.not_corrected_db(teacher_id)
+
+        if not user_practices:
+            await callback_query.answer("هیچ تکلیفی موجود نیست!")
+            return
+
+        await callback_query.answer("لطفا یک تکلیف انتخاب کنید")
+
+        # if page == 0:
+        #     await callback_query.message.reply_text(
+        #         "لطفا یک منتور انتخاب کنید:",
+        #         reply_markup=select_teacher_paginated_keyboard(
+        #             teachers,
+        #             0,
+        #             f"admin_{self.type}_practice_user_practice_list",
+        #             f"admin_{self.type}_user_practice_set_teahcer",
+        #             user_practice_id=user_practice_id,
+        #             back_query="delete_this_msg",
+        #         ),
+        #     )
+        #     return
+
+        await callback_query.message.edit_reply_markup(
+            reply_markup=get_paginated_keyboard(
+                user_practices,
+                page,
+                f"admin_teahcer_not_corrected_list_{teacher_id}",
+                "admin_all_practice_user_practice_select",
+            ),
+        )
+
+
+class PoorTeachers:
+    def __init__(self, app):
+        self.app = app
+        self.register_handlers()
+
+    def register_handlers(self):
+        self.app.on_message(
+            filters.regex("منتور‌های تمام نکرده") & filters.user(ADMINS_LIST_ID)
+        )(self.list)
+        self.app.on_callback_query(
+            filters.regex(r"admin_poor_teachers_list_(\d+)")
+            & filters.user(ADMINS_LIST_ID)
+        )(self.paginate_list)
+
+    @property
+    def teachers(self):
+        with db.get_session() as session:
+            return (
+                session.query(db.TeacherModel)
+                .join(
+                    db.CorrectionModel,
+                    db.CorrectionModel.teacher_id == db.TeacherModel.id,
+                )
+                .filter(db.CorrectionModel.caption.is_(None))
+                .all()
+            )
+
+    async def list(self, client, message):
+        if not self.teachers:
+            await message.reply_text("هیچ معلمی در دسترس نیست!")
+            return
+
+        await message.reply_text(
+            "تمامی معلم‌ها:",
+            reply_markup=teachers_paginated_keyboard(
+                self.teachers, 0, "admin_poor_teachers_list", "admin_teachers_select"
+            ),
+        )
+
+    async def paginate_list(self, client, callback_query):
+        page = int(callback_query.data.split("_")[-1])
+
+        if page == 0:
+            await callback_query.message.delete()
+            await callback_query.message.reply_text(
+                "تمامی معلم‌ها:",
+                reply_markup=teachers_paginated_keyboard(
+                    self.teachers,
+                    0,
+                    "admin_poor_teachers_list",
+                    "admin_teachers_select",
+                ),
+            )
+            return
+        await callback_query.message.edit_reply_markup(
+            reply_markup=teachers_paginated_keyboard(
+                self.teachers, page, "admin_poor_teachers_list", "admin_teachers_select"
+            )
+        )
 
 
 class Notifiaction:
@@ -2654,6 +3054,154 @@ class Notifiaction:
                 pass
 
 
+class Search:
+    def __init__(self, app):
+        self.app = app
+        self.register_handlers()
+
+    def register_handlers(self):
+        self.app.on_message(filters.regex("سرچ") & filters.user(ADMINS_LIST_ID))(
+            self.select_type
+        )
+        self.app.on_callback_query(
+            filters.regex(r"admin_search_select_(\d+)") & filters.user(ADMINS_LIST_ID)
+        )(self.reply)
+
+    async def select_type(self, client, message):
+        await message.reply_text(
+            "نوع سرچ را انتخاب کنید:",
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "یوزر", callback_data="admin_search_select_0"
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "معلم", callback_data="admin_search_select_1"
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "تمرین", callback_data="admin_search_select_3"
+                        )
+                    ],
+                    [InlineKeyboardButton("exit!", callback_data="back_home")],
+                ]
+            ),
+        )
+
+    async def reply(self, client, callback_query):
+        # await callback_query.message.delete()
+        type = int(callback_query.data.split("_")[-1])
+        await callback_query.message.delete()
+
+        await callback_query.message.reply_text(
+            "متن کلیدی موردنظر را ارسال کنید.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("exit!", callback_data="back_home")]],
+            ),
+        )
+
+        try:
+            answer = await pyrostep.wait_for(
+                callback_query.from_user.id, timeout=TIME_OUT * 60
+            )
+            markup = []
+
+            if type == 0:
+                users = self.search_user(answer.text)
+                for user in users:
+                    markup.append(
+                        [
+                            InlineKeyboardButton(
+                                user.name, callback_data=f"admin_users_select_{user.id}"
+                            )
+                        ]
+                    )
+                markup.append(
+                    [InlineKeyboardButton("exit!", callback_data="back_home")]
+                )
+                await answer.reply_text(
+                    f"متن سرچ شده: {answer.text}\nموارد یافت شده:",
+                    reply_markup=InlineKeyboardMarkup(markup),
+                )
+            elif type == 1:
+                users = self.search_teacher(answer.text)
+                for user in users:
+                    markup.append(
+                        [
+                            InlineKeyboardButton(
+                                user.name,
+                                callback_data=f"admin_teachers_select_{user.id}",
+                            )
+                        ]
+                    )
+                markup.append(
+                    [InlineKeyboardButton("exit!", callback_data="back_home")]
+                )
+                await answer.reply_text(
+                    f"متن سرچ شده: {answer.text}\nموارد یافت شده:",
+                    reply_markup=InlineKeyboardMarkup(markup),
+                )
+            else:
+                practices = self.search_practice(answer.text)
+                for practice in practices:
+                    markup.append(
+                        [
+                            InlineKeyboardButton(
+                                practice.title,
+                                callback_data=f"admin_all_practice_select_{practice.id}",
+                            )
+                        ]
+                    )
+                markup.append(
+                    [InlineKeyboardButton("exit!", callback_data="back_home")]
+                )
+                await answer.reply_text(
+                    f"متن سرچ شده: {answer.text}\nموارد یافت شده:",
+                    reply_markup=InlineKeyboardMarkup(markup),
+                )
+
+        except TimeoutError:
+            await callback_query.message.reply_text("مهلت زمانی پاسخ تمام شد!")
+        except asyncio.CancelledError:
+            await callback_query.message.reply_text("کنسل شد!")
+        except Exception:
+            await callback_query.message.reply_text("error!")
+
+    @staticmethod
+    def search_user(name):
+        with db.get_session() as session:
+            return (
+                session.query(db.UserModel.id, db.UserModel.name)
+                .filter(db.UserModel.name.like("%" + name + "%"))
+                .limit(10)
+                .all()
+            )
+
+    @staticmethod
+    def search_teacher(name):
+        with db.get_session() as session:
+            return (
+                session.query(db.TeacherModel.id, db.TeacherModel.name)
+                .filter(db.TeacherModel.name.like("%" + name + "%"))
+                .limit(10)
+                .all()
+            )
+
+    @staticmethod
+    def search_practice(name):
+        with db.get_session() as session:
+            return (
+                session.query(db.PracticeModel.id, db.PracticeModel.title)
+                .filter(db.PracticeModel.title.like("%" + name + "%"))
+                .limit(10)
+                .all()
+            )
+
+
 def register_admin_handlers(app):
     UserPracticeUtils(app)
 
@@ -2665,5 +3213,7 @@ def register_admin_handlers(app):
     AllUserPractice(app)
     Users(app)
     Teachers(app)
+    PoorTeachers(app)
     Practice(app)
     Notifiaction(app)
+    Search(app)

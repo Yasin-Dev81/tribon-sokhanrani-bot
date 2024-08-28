@@ -517,7 +517,7 @@ class BaseUserPractice:
                     db.UserPracticeModel.id,
                     db.CorrectionModel.id,
                     db.TeacherModel.name,
-                    db.CorrectionModel.user_practice_id,
+                    db.UserPracticeModel.practice_id,
                 )
                 .filter(db.UserPracticeModel.id == user_practice_id)
                 .join(
@@ -531,10 +531,10 @@ class BaseUserPractice:
             )
             if correction:
                 await msg.edit_text(
+                    f"practice-id: {correction.practice_id}"
                     f"user-practice: {user_practice_id}\n"
-                    f"correction: {correction.id}\n"
+                    f"correction-id: {correction.id}\n"
                     f"teacher-name: {correction.name}\n"
-                    f"practice-id: {correction.user_practice_id}"
                 )
 
 

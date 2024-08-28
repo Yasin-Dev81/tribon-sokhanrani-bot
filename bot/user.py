@@ -725,9 +725,9 @@ class BasePractice:
             )
             if user_practice:
                 await msg.edit_text(
+                    f"practice-id: {user_practice.practice_id}\n"
                     f"user-practice: {user_practice.id}\n"
                     f"user-name: {user_practice.name}\n"
-                    f"practice-id: {user_practice.practice_id}"
                 )
 
 

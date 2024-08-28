@@ -15,6 +15,7 @@ from .pagination import (
     teachers_paginated_keyboard,
     user_practice_paginated_keyboard,
     select_teacher_paginated_keyboard,
+    poor_teachers_paginated_keyboard,
 )
 from utils import generate_progress_bar
 import db
@@ -2371,77 +2372,40 @@ class Users:
         )
 
 
-class Teachers:
-    def __init__(self, app):
+class BaseTeachers:
+    def __init__(self, app, type="all"):
         self.app = app
-        self.register_handlers()
+        self.type = type
+        self.base_register_handlers()
 
-    def register_handlers(self):
-        self.app.on_message(filters.regex("منتورها") & filters.user(ADMINS_LIST_ID))(
-            self.list
-        )
+    def base_register_handlers(self):
         self.app.on_callback_query(
-            filters.regex(r"admin_teachers_list_(\d+)") & filters.user(ADMINS_LIST_ID)
-        )(self.paginate_list)
-        self.app.on_callback_query(
-            filters.regex(r"admin_teachers_select_(\d+)") & filters.user(ADMINS_LIST_ID)
+            filters.regex(rf"{self.type}_teachers_select_(\d+)")
+            & filters.user(ADMINS_LIST_ID)
         )(self.select)
         self.app.on_callback_query(
-            filters.regex(r"admin_teachers_notif_(\d+)") & filters.user(ADMINS_LIST_ID)
+            filters.regex(rf"{self.type}_teachers_notif_(\d+)")
+            & filters.user(ADMINS_LIST_ID)
         )(self.notif)
         self.app.on_callback_query(
-            filters.regex(r"admin_teachers_confirm_delete_(\d+)")
+            filters.regex(rf"{self.type}_teachers_confirm_delete_(\d+)")
             & filters.user(ADMINS_LIST_ID)
         )(self.confirm_delete)
         self.app.on_callback_query(
-            filters.regex(r"admin_teachers_delete_(\d+)") & filters.user(ADMINS_LIST_ID)
+            filters.regex(rf"{self.type}_teachers_delete_(\d+)")
+            & filters.user(ADMINS_LIST_ID)
         )(self.delete)
-        self.app.on_message(
-            filters.regex("اضافه کردن منتور جدید") & filters.user(ADMINS_LIST_ID)
-        )(self.add)
+        # self.app.on_message(
+        #     filters.regex("اضافه کردن منتور جدید") & filters.user(ADMINS_LIST_ID)
+        # )(self.add)
         self.app.on_callback_query(
-            filters.regex(r"admin_teahcer_correction_list_(\d+)_(\d+)")
+            filters.regex(rf"{self.type}_teahcer_correction_list_(\d+)_(\d+)")
             & filters.user(ADMINS_LIST_ID)
         )(self.correction_list)
         self.app.on_callback_query(
-            filters.regex(r"admin_teahcer_not_corrected_list_(\d+)_(\d+)")
+            filters.regex(rf"{self.type}_teahcer_not_corrected_list_(\d+)_(\d+)")
             & filters.user(ADMINS_LIST_ID)
         )(self.not_corrected_list)
-
-    @property
-    def teachers(self):
-        with db.get_session() as session:
-            return session.query(db.TeacherModel).all()
-
-    async def list(self, client, message):
-        if not self.teachers:
-            await message.reply_text("هیچ معلمی در دسترس نیست!")
-            return
-
-        await message.reply_text(
-            "تمامی معلم‌ها:",
-            reply_markup=teachers_paginated_keyboard(
-                self.teachers, 0, "admin_teachers_list", "admin_teachers_select"
-            ),
-        )
-
-    async def paginate_list(self, client, callback_query):
-        page = int(callback_query.data.split("_")[-1])
-
-        if page == 0:
-            await callback_query.message.delete()
-            await callback_query.message.reply_text(
-                "تمامی معلم‌ها:",
-                reply_markup=teachers_paginated_keyboard(
-                    self.teachers, 0, "admin_teachers_list", "admin_teachers_select"
-                ),
-            )
-            return
-        await callback_query.message.edit_reply_markup(
-            reply_markup=teachers_paginated_keyboard(
-                self.teachers, page, "admin_teachers_list", "admin_teachers_select"
-            )
-        )
 
     @staticmethod
     def user(pk):
@@ -2469,41 +2433,43 @@ class Teachers:
     async def select(self, client, callback_query):
         user_id = int(callback_query.data.split("_")[-1])
         user = self.user(user_id)
-        await callback_query.message.delete()
 
-        await callback_query.message.reply_text(
+        await callback_query.message.edit_text(
             f"🆔 #{user_id}\n👤 نام معلم: {user.name}\n"
             f"📞 شماره معلم: \n{user.phone_number}\n"
             "➖➖➖➖➖➖➖➖➖\n"
             f"{generate_progress_bar(user.corrected_user_practice_count/user.user_practice_count)}\n<blockquote expandable>"
             f"▫️ تعداد تکلیف تخصیص داده شده: {user.user_practice_count}\n"
             f"▫️ تعداد تکلیف تصحیح شده: {user.corrected_user_practice_count}\n"
-            f"▫️ تعداد تکلیف تصحیح نشده: {user.user_practice_count - user.corrected_user_practice_count}</blockquote>",
-            reply_markup=InlineKeyboardMarkup(
+            f"▫️ تعداد تکلیف تصحیح نشده: {user.user_practice_count - user.corrected_user_practice_count}</blockquote>"
+        )
+
+        await callback_query.message.edit_reply_markup(
+            InlineKeyboardMarkup(
                 [
                     [
                         InlineKeyboardButton(
                             "تمامی تکالیف",
-                            callback_data=f"admin_teahcer_correction_list_{user_id}_0",
+                            callback_data=f"{self.type}_teahcer_correction_list_{user_id}_0",
                         ),
                         InlineKeyboardButton(
                             "تکالیف تحلیل نشده",
-                            callback_data=f"admin_teahcer_not_corrected_list_{user_id}_0",
+                            callback_data=f"{self.type}_teahcer_not_corrected_list_{user_id}_0",
                         ),
                     ],
                     [
                         InlineKeyboardButton(
                             "🗑 حذف معلم",
-                            callback_data=f"admin_teachers_confirm_delete_{user_id}",
+                            callback_data=f"{self.type}_teachers_confirm_delete_{user_id}",
                         ),
                         InlineKeyboardButton(
                             "ارسال نوتیف",
-                            callback_data=f"admin_teachers_notif_{user_id}",
+                            callback_data=f"{self.type}_teachers_notif_{user_id}",
                         ),
                     ],
                     [
                         InlineKeyboardButton(
-                            "🔙 بازگشت", callback_data="admin_teachers_list_0"
+                            "🔙 بازگشت", callback_data=f"{self.type}_teachers_list_0"
                         ),
                         InlineKeyboardButton("exit!", callback_data="back_home"),
                     ],
@@ -2556,10 +2522,12 @@ class Teachers:
                 [
                     [
                         InlineKeyboardButton(
-                            "بله", callback_data=f"admin_teachers_delete_{user_id}"
+                            "بله",
+                            callback_data=f"{self.type}_teachers_delete_{user_id}",
                         ),
                         InlineKeyboardButton(
-                            "نه!", callback_data=f"admin_teachers_select_{user_id}"
+                            "نه!",
+                            callback_data=f"{self.type}_teachers_select_{user_id}",
                         ),
                     ]
                 ]
@@ -2682,7 +2650,7 @@ class Teachers:
 
     async def correction_list(self, client, callback_query):
         match = re.search(
-            r"admin_teahcer_correction_list_(\d+)_(\d+)",
+            rf"{self.type}_teahcer_correction_list_(\d+)_(\d+)",
             callback_query.data,
         )
         if not match:
@@ -2705,8 +2673,8 @@ class Teachers:
         #         reply_markup=select_teacher_paginated_keyboard(
         #             teachers,
         #             0,
-        #             f"admin_{self.type}_practice_user_practice_list",
-        #             f"admin_{self.type}_user_practice_set_teahcer",
+        #             f"{self.type}_{self.type}_practice_user_practice_list",
+        #             f"{self.type}_{self.type}_user_practice_set_teahcer",
         #             user_practice_id=user_practice_id,
         #             back_query="delete_this_msg",
         #         ),
@@ -2717,8 +2685,9 @@ class Teachers:
             reply_markup=get_paginated_keyboard(
                 user_practices,
                 page,
-                f"admin_teahcer_correction_list_{teacher_id}",
-                "admin_all_practice_user_practice_select",
+                f"{self.type}_teahcer_correction_list_{teacher_id}",
+                f"{self.type}_all_practice_user_practice_select",
+                back_query=f"{self.type}_teachers_select_{teacher_id}",
             ),
         )
 
@@ -2751,7 +2720,7 @@ class Teachers:
 
     async def not_corrected_list(self, client, callback_query):
         match = re.search(
-            r"admin_teahcer_not_corrected_list_(\d+)_(\d+)",
+            rf"{self.type}_teahcer_not_corrected_list_(\d+)_(\d+)",
             callback_query.data,
         )
         if not match:
@@ -2774,8 +2743,8 @@ class Teachers:
         #         reply_markup=select_teacher_paginated_keyboard(
         #             teachers,
         #             0,
-        #             f"admin_{self.type}_practice_user_practice_list",
-        #             f"admin_{self.type}_user_practice_set_teahcer",
+        #             f"{self.type}_{self.type}_practice_user_practice_list",
+        #             f"{self.type}_{self.type}_user_practice_set_teahcer",
         #             user_practice_id=user_practice_id,
         #             back_query="delete_this_msg",
         #         ),
@@ -2786,38 +2755,35 @@ class Teachers:
             reply_markup=get_paginated_keyboard(
                 user_practices,
                 page,
-                f"admin_teahcer_not_corrected_list_{teacher_id}",
+                f"{self.type}_teahcer_not_corrected_list_{teacher_id}",
                 "admin_all_practice_user_practice_select",
+                back_query=f"{self.type}_teachers_select_{teacher_id}",
             ),
         )
 
 
-class PoorTeachers:
-    def __init__(self, app):
+class AllTeachers(BaseTeachers):
+    def __init__(self, app, type="all"):
+        super().__init__(app, type)
+        self.type = type
         self.app = app
         self.register_handlers()
 
     def register_handlers(self):
-        self.app.on_message(
-            filters.regex("منتور‌های تمام نکرده") & filters.user(ADMINS_LIST_ID)
-        )(self.list)
+        self.app.on_message(filters.regex("منتورها") & filters.user(ADMINS_LIST_ID))(
+            self.list
+        )
         self.app.on_callback_query(
-            filters.regex(r"admin_poor_teachers_list_(\d+)")
-            & filters.user(ADMINS_LIST_ID)
+            filters.regex(r"all_teachers_list_(\d+)") & filters.user(ADMINS_LIST_ID)
         )(self.paginate_list)
+        self.app.on_message(
+            filters.regex("اضافه کردن منتور جدید") & filters.user(ADMINS_LIST_ID)
+        )(self.add)
 
     @property
     def teachers(self):
         with db.get_session() as session:
-            return (
-                session.query(db.TeacherModel)
-                .join(
-                    db.CorrectionModel,
-                    db.CorrectionModel.teacher_id == db.TeacherModel.id,
-                )
-                .filter(db.CorrectionModel.caption.is_(None))
-                .all()
-            )
+            return session.query(db.TeacherModel).all()
 
     async def list(self, client, message):
         if not self.teachers:
@@ -2827,7 +2793,7 @@ class PoorTeachers:
         await message.reply_text(
             "تمامی معلم‌ها:",
             reply_markup=teachers_paginated_keyboard(
-                self.teachers, 0, "admin_poor_teachers_list", "admin_teachers_select"
+                self.teachers, 0, "all_teachers_list", "all_teachers_select"
             ),
         )
 
@@ -2835,20 +2801,97 @@ class PoorTeachers:
         page = int(callback_query.data.split("_")[-1])
 
         if page == 0:
-            await callback_query.message.delete()
-            await callback_query.message.reply_text(
-                "تمامی معلم‌ها:",
+            # await callback_query.message.delete()
+            await callback_query.message.edit_text("تمامی منتورها:")
+            await callback_query.message.edit_reply_markup(
                 reply_markup=teachers_paginated_keyboard(
-                    self.teachers,
-                    0,
-                    "admin_poor_teachers_list",
-                    "admin_teachers_select",
+                    self.teachers, 0, "all_teachers_list", "all_teachers_select"
                 ),
             )
             return
         await callback_query.message.edit_reply_markup(
             reply_markup=teachers_paginated_keyboard(
-                self.teachers, page, "admin_poor_teachers_list", "admin_teachers_select"
+                self.teachers, page, "all_teachers_list", "all_teachers_select"
+            )
+        )
+
+
+class PoorTeachers(BaseTeachers):
+    def __init__(self, app, type="poor"):
+        super().__init__(app, type)
+        self.type = type
+        self.app = app
+        self.register_handlers()
+
+    def register_handlers(self):
+        self.app.on_message(
+            filters.regex("منتور‌های تمام نکرده") & filters.user(ADMINS_LIST_ID)
+        )(self.list)
+        self.app.on_callback_query(
+            filters.regex(r"poor_teachers_list_(\d+)") & filters.user(ADMINS_LIST_ID)
+        )(self.paginate_list)
+
+    @property
+    def teachers(self):
+        with db.get_session() as session:
+            return (
+                session.query(
+                    db.TeacherModel.id,
+                    db.TeacherModel.name,
+                    (
+                        100
+                        * func.count(func.nullif(db.CorrectionModel.caption, None))
+                        / func.count(db.CorrectionModel.id)
+                    ).label("correction_ratio"),
+                )
+                .join(
+                    db.CorrectionModel,
+                    db.CorrectionModel.teacher_id == db.TeacherModel.id,
+                )
+                .group_by(db.TeacherModel.id, db.TeacherModel.name)
+                .having(
+                    (
+                        func.count(func.nullif(db.CorrectionModel.caption, None))
+                        / func.count(db.CorrectionModel.id)
+                    )
+                    < 1
+                )
+                .order_by("correction_ratio")
+                .all()
+            )
+
+    async def list(self, client, message):
+        if not self.teachers:
+            await message.reply_text("هیچ معلمی در دسترس نیست!")
+            return
+
+        await message.reply_text(
+            "منتورهایی که تصحیح‌هایشان تمام نشده است:",
+            reply_markup=poor_teachers_paginated_keyboard(
+                self.teachers, 0, "poor_teachers_list", "poor_teachers_select"
+            ),
+        )
+
+    async def paginate_list(self, client, callback_query):
+        page = int(callback_query.data.split("_")[-1])
+
+        if page == 0:
+            # await callback_query.message.delete()
+            await callback_query.message.edit_text(
+                "منتورهایی که تصحیح‌هایشان تمام نشده است:",
+            )
+            await callback_query.message.edit_reply_markup(
+                reply_markup=poor_teachers_paginated_keyboard(
+                    self.teachers,
+                    0,
+                    "poor_teachers_list",
+                    "poor_teachers_select",
+                ),
+            )
+            return
+        await callback_query.message.edit_reply_markup(
+            reply_markup=poor_teachers_paginated_keyboard(
+                self.teachers, page, "poor_teachers_list", "poor_teachers_select"
             )
         )
 
@@ -3212,7 +3255,7 @@ def register_admin_handlers(app):
     NotDonePractice(app)
     AllUserPractice(app)
     Users(app)
-    Teachers(app)
+    AllTeachers(app)
     PoorTeachers(app)
     Practice(app)
     Notifiaction(app)

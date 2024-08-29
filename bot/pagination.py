@@ -162,7 +162,7 @@ def poor_teachers_paginated_keyboard(
     keyboard = [
         [
             InlineKeyboardButton(
-                f"{i.name} | {i.correction_ratio:.1f}%",
+                f"{i.name} | {i.correction_ratio:.0f}% | {i.not_corrected}",
                 callback_data=f"{keyboard_callback}_{i.id}",
             )
         ]

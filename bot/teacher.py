@@ -531,7 +531,7 @@ class BaseUserPractice:
             )
             if correction:
                 await msg.edit_text(
-                    f"practice-id: {correction.practice_id}"
+                    f"practice-id: {correction.practice_id}\n"
                     f"user-practice: {user_practice_id}\n"
                     f"correction-id: {correction.id}\n"
                     f"teacher-name: {correction.name}\n"

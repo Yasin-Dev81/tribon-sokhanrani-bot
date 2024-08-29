@@ -2843,6 +2843,10 @@ class PoorTeachers(BaseTeachers):
                         * func.count(func.nullif(db.CorrectionModel.caption, None))
                         / func.count(db.CorrectionModel.id)
                     ).label("correction_ratio"),
+                    (
+                        func.count(db.CorrectionModel.id)
+                        - func.count(func.nullif(db.CorrectionModel.caption, None))
+                    ).label("not_corrected"),
                 )
                 .join(
                     db.CorrectionModel,
@@ -2866,7 +2870,7 @@ class PoorTeachers(BaseTeachers):
             return
 
         await message.reply_text(
-            "منتورهایی که تصحیح‌هایشان تمام نشده است:",
+            "منتورهایی که تصحیح‌هایشان تمام نشده است:\n\n[نام]|[درصد پیشرفت]|[تعداد تکالیف باقی‌مانده]",
             reply_markup=poor_teachers_paginated_keyboard(
                 self.teachers, 0, "poor_teachers_list", "poor_teachers_select"
             ),
@@ -2878,7 +2882,7 @@ class PoorTeachers(BaseTeachers):
         if page == 0:
             # await callback_query.message.delete()
             await callback_query.message.edit_text(
-                "منتورهایی که تصحیح‌هایشان تمام نشده است:",
+                "منتورهایی که تصحیح‌هایشان تمام نشده است:\n\n[نام]|[درصد پیشرفت]|[تعداد تکالیف باقی‌مانده]",
             )
             await callback_query.message.edit_reply_markup(
                 reply_markup=poor_teachers_paginated_keyboard(

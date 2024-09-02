@@ -14,7 +14,6 @@ from .pagination import (
     users_paginated_keyboard,
     teachers_paginated_keyboard,
     user_practice_paginated_keyboard,
-    select_teacher_paginated_keyboard,
     poor_teachers_paginated_keyboard,
 )
 from utils import generate_progress_bar
@@ -1177,7 +1176,10 @@ class BaseUserPractice:
             await callback_query.answer("هیچ منتور فعالی موجود نیست!")
             return
 
-        await callback_query.answer("لطفا یک منتور انتخاب کنید", show_alert=True)
+        if page == 0:
+            await callback_query.answer("لطفا یک منتور انتخاب کنید", show_alert=True)
+        else:
+            await callback_query.answer("page %s" % (page+1))
 
         # if page == 0:
         #     await callback_query.message.reply_text(
@@ -1194,13 +1196,12 @@ class BaseUserPractice:
         #     return
 
         await callback_query.message.edit_reply_markup(
-            reply_markup=select_teacher_paginated_keyboard(
+            reply_markup=get_paginated_keyboard(
                 teachers,
                 page,
-                f"admin_{self.type}_practice_user_practice_list",
-                f"admin_{self.type}_user_practice_set_teahcer",
-                user_practice_id=user_practice_id,
-                back_query="delete_this_msg",
+                f"admin_{self.type}_user_practice_teahcer_list_{user_practice_id}",
+                f"admin_{self.type}_user_practice_set_teahcer_{user_practice_id}",
+                back_query=f"admin_{self.type}_practice_user_practice_select_{user_practice_id}",
             )
         )
 

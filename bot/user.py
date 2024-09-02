@@ -909,13 +909,13 @@ class CorrectedPractice(BasePractice):
         self.register_handlers()
 
     def register_handlers(self):
-        self.app.on_message(filters.regex("تصحیح شده‌ها") & filters.create(is_user))(
-            self.list
-        )
+        self.app.on_message(
+            filters.regex("تصحیح شده‌ها") & filters.create(is_user)
+        )(self.xlist)
         self.app.on_callback_query(
             filters.regex(r"user_corrected_practice_paginate_list_(\d+)")
             & filters.create(is_user)
-        )(self.paginate_list)
+        )(self.xpaginate_list)
 
     def practices(self, user_tell_id):
         with db.get_session() as session:
@@ -925,6 +925,7 @@ class CorrectedPractice(BasePractice):
                     db.PracticeModel.id,
                     db.PracticeModel.title,
                 )
+                .filter(db.CorrectionModel.caption.is_not(None))
                 .join(
                     db.UserPracticeModel,
                     db.UserPracticeModel.id == db.CorrectionModel.user_practice_id,
@@ -933,17 +934,24 @@ class CorrectedPractice(BasePractice):
                     db.PracticeModel,
                     db.PracticeModel.id == db.UserPracticeModel.practice_id,
                 )
+                .join(db.UserModel, db.UserModel.id == db.UserPracticeModel.user_id)
                 .filter(
-                    and_(
-                        db.UserModel.tell_id == user_tell_id,
-                        db.CorrectionModel.caption.is_not(None),
-                    )
+                    db.UserModel.tell_id == user_tell_id,
                 )
             ).all()
+            # query = (
+            #     session.query(
+            #         db.PracticeModel.id,
+            #         db.PracticeModel.title,
+            #     ).join(
+            #         db.UserPracticeModel,
+            #         db.UserPracticeModel.practice_id == db.PracticeModel.id,
+            #     )
+            # ).all()
 
             return query
 
-    async def list(self, client, message):
+    async def xlist(self, client, message):
         practices = self.practices(message.from_user.id)
         if not practices:
             await message.reply_text("هیچ تمرین تصحیح شده‌ای موجود نیست!")
@@ -959,7 +967,7 @@ class CorrectedPractice(BasePractice):
             ),
         )
 
-    async def paginate_list(self, client, callback_query):
+    async def xpaginate_list(self, client, callback_query):
         page = int(callback_query.data.split("_")[-1])
         practices = self.practices(callback_query.from_user.id)
 

@@ -1032,7 +1032,7 @@ class BaseUserPractice:
                     [
                         InlineKeyboardButton(
                             "تعویض منتور",
-                            callback_data=f"admin_{self.type}_user_practice_update_teahcer_list_{user_practice_id}_0",
+                            callback_data=f"admin_{self.type}_user_practice_update_teahcer_list_{user_practice.correction_id}_0",
                         )
                     ],
                 )
@@ -1250,7 +1250,10 @@ class BaseUserPractice:
             await callback_query.answer("هیچ منتور فعالی موجود نیست!")
             return
 
-        await callback_query.answer("لطفا یک منتور انتخاب کنید", show_alert=True)
+        if page == 0:
+            await callback_query.answer("لطفا یک منتور انتخاب کنید", show_alert=True)
+        else:
+            await callback_query.answer("page %s" % (page+1))
 
         # if page == 0:
         #     await callback_query.message.reply_text(
@@ -1267,12 +1270,11 @@ class BaseUserPractice:
         #     return
 
         await callback_query.message.edit_reply_markup(
-            reply_markup=select_teacher_paginated_keyboard(
+            reply_markup=get_paginated_keyboard(
                 teachers,
                 page,
-                f"admin_{self.type}_practice_user_practice_list",
-                f"admin_{self.type}_user_practice_set_teahcer",
-                user_practice_id=correction_id,
+                f"admin_{self.type}_user_practice_update_teahcer_list_{correction_id}",
+                f"admin_{self.type}_user_practice_update_teahcer_{correction_id}",
                 back_query="delete_this_msg",
             )
         )
@@ -1290,9 +1292,9 @@ class BaseUserPractice:
         teacher_id = int(match.group(2))
 
         with db.get_session() as session:
-            correction = session.query(db.CorrectionModel).get(correction_id)
+            correction = session.get(db.CorrectionModel, correction_id)
             if correction:
-                session.teacher_id = teacher_id
+                correction.teacher_id = teacher_id
                 session.commit()
                 await callback_query.answer(
                     "تکلیف با موفقیت تخصیص یافت.", show_alert=True

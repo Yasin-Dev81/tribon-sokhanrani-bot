@@ -149,9 +149,8 @@ class Practice:
                                 i.name,
                                 callback_data=f"admin_practice_set_type_{i.id}_{new_practice_id}",
                             )
-                            for i in session.query(db.UserTypeModel).all()
-                        ],
-                        [InlineKeyboardButton("exit!", callback_data="back_home")],
+                        ]
+                        for i in session.query(db.UserTypeModel).all()
                     ]
                 ),
             )
@@ -497,21 +496,21 @@ class Practice:
     @staticmethod
     async def teachers_not_corrected(client, practic_id, data):
         with db.get_session() as session:
-            subquery = select(
-                (
-                    session.query(db.CorrectionModel.teacher_id)
-                    .join(
-                        db.UserPracticeModel,
-                        db.UserPracticeModel.id == db.CorrectionModel.user_practice_id,
-                    )
-                    .filter(db.UserPracticeModel.practice_id == practic_id)
-                ).subquery()
-            )
-
             teachers = (
-                session.query(db.TeacherModel)
-                .filter(db.TeacherModel.id.notin_(subquery))
-                .all()
+                session.query(
+                    db.CorrectionModel.teacher_id,
+                    db.TeacherModel.chat_id,
+                )
+                .filter(db.CorrectionModel.caption.is_(None))
+                .join(
+                    db.UserPracticeModel,
+                    db.UserPracticeModel.id == db.CorrectionModel.user_practice_id,
+                )
+                .filter(db.UserPracticeModel.practice_id == practic_id)
+                .join(
+                    db.TeacherModel, db.TeacherModel.id == db.CorrectionModel.teacher_id
+                )
+                .distinct()
             )
 
             for teacher in teachers:
@@ -606,9 +605,8 @@ class Practice:
                                     i.name,
                                     callback_data=f"admin_practice_set_type_{i.id}_{practice_id}",
                                 )
-                                for i in session.query(db.UserTypeModel).all()
-                            ],
-                            [InlineKeyboardButton("exit!", callback_data="back_home")],
+                            ]
+                            for i in session.query(db.UserTypeModel).all()
                         ]
                     ),
                 )
@@ -914,6 +912,7 @@ class BaseUserPractice:
                         ),
                     ).label("status"),
                     db.UserModel.id.label("user_id"),
+                    db.UserModel.name.label("user_name"),
                     db.UserPracticeModel.datetime_created,
                     db.UserPracticeModel.datetime_modified,
                     db.CorrectionModel.datetime_created.label("takhsis_date"),
@@ -953,6 +952,7 @@ class BaseUserPractice:
                     db.CorrectionModel.datetime_created,
                     db.CorrectionModel.datetime_modified,
                     db.TeacherModel.name,
+                    db.UserModel.name,
                 )
             ).first()
             return query
@@ -1076,6 +1076,7 @@ class BaseUserPractice:
             caption = (
                 f"📌 عنوان: {user_practice.title}\n🔖 متن سوال: {user_practice.caption}\n"
                 f"◾️ کپشن کاربر: {user_practice.user_caption or 'بدون کپشن!'}\n"
+                f"◾️ نام کاربر: {user_practice.user_name}\n"
                 f"◾️ تاریخ پاسخ: {JalaliDateTime(user_practice.datetime_created).strftime(DATE_TIME_FMT, locale='fa')} \n"
                 f"{update_user_practice}"
                 "➖➖➖➖➖➖➖➖➖\n"
@@ -1179,7 +1180,7 @@ class BaseUserPractice:
         if page == 0:
             await callback_query.answer("لطفا یک منتور انتخاب کنید", show_alert=True)
         else:
-            await callback_query.answer("page %s" % (page+1))
+            await callback_query.answer("page %s" % (page + 1))
 
         # if page == 0:
         #     await callback_query.message.reply_text(
@@ -1254,7 +1255,7 @@ class BaseUserPractice:
         if page == 0:
             await callback_query.answer("لطفا یک منتور انتخاب کنید", show_alert=True)
         else:
-            await callback_query.answer("page %s" % (page+1))
+            await callback_query.answer("page %s" % (page + 1))
 
         # if page == 0:
         #     await callback_query.message.reply_text(
@@ -1315,7 +1316,7 @@ class BaseUserPractice:
     async def send_teacher_notification(self, client, user_practice_id, teacher_id):
         try:
             with db.get_session() as session:
-                teacher = session.query(db.TeacherModel.tell_id).get(teacher_id)
+                teacher = session.query(db.TeacherModel).get(teacher_id)
                 await client.send_message(
                     chat_id=teacher.tell_id,
                     text="تکلیف جدیدی به شما تخصیص یافت.",
@@ -1331,7 +1332,7 @@ class BaseUserPractice:
                     ),
                 )
         except Exception:
-            pass
+            print("--- ahay khanom elaha.")
 
 
 class BasePractice(BaseUserPractice):
@@ -2244,15 +2245,8 @@ class Users:
                                                 i.name,
                                                 callback_data=f"admin_users_set_type_{i.id}_{user_id}",
                                             )
-                                            for i in session.query(
-                                                db.UserTypeModel
-                                            ).all()
-                                        ],
-                                        [
-                                            InlineKeyboardButton(
-                                                "exit!", callback_data="back_home"
-                                            )
-                                        ],
+                                        ]
+                                        for i in session.query(db.UserTypeModel).all()
                                     ]
                                 ),
                             )
@@ -2689,7 +2683,7 @@ class BaseTeachers:
                 user_practices,
                 page,
                 f"{self.type}_teahcer_correction_list_{teacher_id}",
-                f"{self.type}_all_practice_user_practice_select",
+                "admin_all_practice_user_practice_select",
                 back_query=f"{self.type}_teachers_select_{teacher_id}",
             ),
         )
@@ -2968,9 +2962,8 @@ class Notifiaction:
                                     i.name,
                                     callback_data=f"admin_notif_user_type_{i.id}",
                                 )
-                                for i in session.query(db.UserTypeModel).all()
-                            ],
-                            [InlineKeyboardButton("exit!", callback_data="back_home")],
+                            ]
+                            for i in session.query(db.UserTypeModel).all()
                         ]
                     ),
                 )

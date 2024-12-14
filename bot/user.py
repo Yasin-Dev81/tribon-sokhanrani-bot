@@ -18,7 +18,7 @@ from config import (
     GROUP_CHAT_ID,
     TIME_ZONE,
     TIME_OUT,
-    WARN_MSG,
+    # WARN_MSG,
     DATE_TIME_FMT,
 )
 import db
@@ -295,9 +295,16 @@ class BasePractice:
             pass
 
         media_types = [i.media_type.value for i in media_acsess]
-        str_media_types = "\n✔️ ".join(media_types)
+        # str_media_types = "\n✔️ ".join(media_types)
+        # await callback_query.message.reply_text(
+        #     f"📌 تایپ‌های قابل قبول:\n✔️ {str_media_types}\n{WARN_MSG}",
+        #     reply_markup=InlineKeyboardMarkup(
+        #         [[InlineKeyboardButton("Cancel", callback_data="back_home")]]
+        #     ),
+        # )
         await callback_query.message.reply_text(
-            f"📌 تایپ‌های قابل قبول:\n✔️ {str_media_types}\n{WARN_MSG}",
+            "تمرین خود را ارسال (آپلود یا فوروارد) کنید\n"
+            "⚠️ مهلت بارگذاری فایل: 20 دقیقه",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("Cancel", callback_data="back_home")]]
             ),
@@ -315,143 +322,135 @@ class BasePractice:
             ),
         }
 
-        while True:
-            try:
-                answer = await pyrostep.wait_for(
-                    callback_query.from_user.id, timeout=TIME_OUT * 60
+        try:
+            answer = await pyrostep.wait_for(
+                callback_query.from_user.id, timeout=TIME_OUT * 60
+            )
+
+            if not self.practice_status(practice_id):
+                await answer.reply_text(
+                    "دیگر امکان آپلود تمرین نمی‌باشد!\n"
+                    "<spoiler>لطفا قوانین را مطالعه فرمایید.</spoiler>"
+                )
+                return
+
+            # Handle media messages
+            if answer.media and answer.media in media_methods:
+                send_method, media_type = media_methods[answer.media]
+
+                if media_type.value not in media_types:
+                    await answer.reply_text(
+                        "این تایپ مدیا مجاز نیست!\nلطفا دوباره اقدام به ارسال کنید!"
+                    )
+                    return
+
+                media_id = getattr(answer, answer.media.value.lower()).file_id
+                caption = answer.caption or None
+                file_size = getattr(answer, answer.media.value.lower()).file_size
+
+                # Check file size limit
+                if (file_size / 1024) > 50_000:
+                    await answer.reply_text(
+                        "فایل ارسالی باید کمتر از <b>50 مگابایت</b> باشد!\nلطفا دوباره اقدام به ارسال کنید!"
+                    )
+                    return
+
+                capt = (
+                    f"message id: <i>{answer.id}</i>\n---\n"
+                    f"from user @{answer.from_user.username}\n"
+                    f"user caption:\n{caption}\n"
+                    f"practice_id: {practice_id}"
                 )
 
-                if not self.practice_status(practice_id):
-                    await answer.reply_text(
-                        "دیگر امکان آپلود تمرین نمی‌باشد!\n"
-                        "<spoiler>لطفا قوانین را مطالعه فرمایید.</spoiler>"
+                # Forward the media to the channel
+                if media_type == db.MediaType.VIDEO_NOTE:
+                    forwarded_message = await send_method(
+                        chat_id=GROUP_CHAT_ID,
+                        **{answer.media.value.lower(): media_id},
                     )
-                    break
-
-                # Handle media messages
-                if answer.media and answer.media in media_methods:
-                    send_method, media_type = media_methods[answer.media]
-
-                    if media_type.value not in media_types:
-                        await answer.reply_text("این تایپ مدیا مجاز نیست!")
-                        continue
-
-                    media_id = getattr(answer, answer.media.value.lower()).file_id
-                    caption = answer.caption or None
-                    file_size = getattr(answer, answer.media.value.lower()).file_size
-
-                    # Check file size limit
-                    if (file_size / 1024) > 50_000:
-                        await answer.reply_text(
-                            "فایل ارسالی باید کمتر از <b>50 مگابایت</b> باشد!"
-                        )
-                        continue
-
-                    if not self.practice_status(practice_id):
-                        await answer.reply_to_message.delete()
-                        await answer.reply_text(
-                            "دیگر امکان آپلود تمرین نمی‌باشد!\n"
-                            "<spoiler>لطفا قوانین را مطالعه فرمایید.</spoiler>"
-                        )
-                        break
-
-                    capt = (
-                        f"message id: <i>{answer.id}</i>\n---\n"
-                        f"from user @{answer.from_user.username}\n"
-                        f"user caption:\n{caption}\n"
-                        f"practice_id: {practice_id}"
-                    )
-
-                    # Forward the media to the channel
-                    if media_type == db.MediaType.VIDEO_NOTE:
-                        forwarded_message = await send_method(
-                            chat_id=GROUP_CHAT_ID,
-                            **{answer.media.value.lower(): media_id},
-                        )
-                    else:
-                        forwarded_message = await send_method(
-                            chat_id=GROUP_CHAT_ID,
-                            **{answer.media.value.lower(): media_id},
-                            caption=capt,
-                        )
-                    telegram_link = getattr(
-                        forwarded_message, answer.media.value.lower()
-                    ).file_id
-
-                    with db.get_session() as session:
-                        user_id = (
-                            session.query(db.UserModel)
-                            .filter_by(tell_id=answer.from_user.id)
-                            .first()
-                            .id
-                        )
-
-                        # Store the Telegram link in the database
-                        user_practice_id = self.upload_db(
-                            user_id=user_id,
-                            practice_id=practice_id,
-                            media_type=media_type,
-                            file_link=telegram_link,
-                            user_caption=caption,
-                        )
-
-                    await answer.reply_text("تکلیف با موفقیت ثبت شد.")
-                    asyncio.create_task(
-                        self.send_admin_upload_notification(client, user_practice_id)
-                    )
-                    if not media_type == db.MediaType.VIDEO_NOTE:
-                        asyncio.create_task(
-                            self.update_group_msg_caption(
-                                forwarded_message, user_practice_id
-                            )
-                        )
-                    try:
-                        await callback_query.message.delete()
-                    except Exception:
-                        pass
-                    break
-
-                # Handle text messages
-                elif db.MediaType.TEXT.value in media_types and answer.text:
-                    caption = answer.text
-
-                    with db.get_session() as session:
-                        user_id = (
-                            session.query(db.UserModel)
-                            .filter_by(tell_id=answer.from_user.id)
-                            .first()
-                            .id
-                        )
-
-                        user_practice_id = self.upload_db(
-                            user_id=user_id,
-                            practice_id=practice_id,
-                            media_type=db.MediaType.TEXT,
-                            file_link=None,
-                            user_caption=caption,
-                        )
-
-                    await answer.reply_text("تکلیف با موفقیت ثبت شد.")
-                    asyncio.create_task(
-                        self.send_admin_upload_notification(client, user_practice_id)
-                    )
-                    try:
-                        await callback_query.message.delete()
-                    except Exception:
-                        pass
-                    break
-
                 else:
-                    await answer.reply_text(
-                        "فقط امکان ثبت تایپ مدیاهای ذکر شده برقرار است!"
+                    forwarded_message = await send_method(
+                        chat_id=GROUP_CHAT_ID,
+                        **{answer.media.value.lower(): media_id},
+                        caption=capt,
+                    )
+                telegram_link = getattr(
+                    forwarded_message, answer.media.value.lower()
+                ).file_id
+
+                with db.get_session() as session:
+                    user_id = (
+                        session.query(db.UserModel)
+                        .filter_by(tell_id=answer.from_user.id)
+                        .first()
+                        .id
                     )
 
-            except TimeoutError:
-                await callback_query.message.reply_text("مهلت زمانی آپلود تمام شد!")
-                break
-            except asyncio.CancelledError:
-                await callback_query.message.reply_text("آپلود کنسل شد!")
-                break
+                    # Store the Telegram link in the database
+                    user_practice_id = self.upload_db(
+                        user_id=user_id,
+                        practice_id=practice_id,
+                        media_type=media_type,
+                        file_link=telegram_link,
+                        user_caption=caption,
+                    )
+
+                await answer.reply_text("تکلیف با موفقیت ثبت شد.")
+                asyncio.create_task(
+                    self.send_admin_upload_notification(client, user_practice_id)
+                )
+                if not media_type == db.MediaType.VIDEO_NOTE:
+                    asyncio.create_task(
+                        self.update_group_msg_caption(
+                            forwarded_message, user_practice_id
+                        )
+                    )
+                try:
+                    await callback_query.message.delete()
+                except Exception:
+                    pass
+                return
+
+            # Handle text messages
+            elif db.MediaType.TEXT.value in media_types and answer.text:
+                caption = answer.text
+
+                with db.get_session() as session:
+                    user_id = (
+                        session.query(db.UserModel)
+                        .filter_by(tell_id=answer.from_user.id)
+                        .first()
+                        .id
+                    )
+
+                    user_practice_id = self.upload_db(
+                        user_id=user_id,
+                        practice_id=practice_id,
+                        media_type=db.MediaType.TEXT,
+                        file_link=None,
+                        user_caption=caption,
+                    )
+
+                await answer.reply_text("تکلیف با موفقیت ثبت شد.")
+                asyncio.create_task(
+                    self.send_admin_upload_notification(client, user_practice_id)
+                )
+                try:
+                    await callback_query.message.delete()
+                except Exception:
+                    pass
+                return
+            else:
+                await answer.reply_text(
+                    "فقط امکان ثبت تایپ مدیاهای ذکر شده برقرار است!\nلطفا دوباره اقدام به ارسال کنید!"
+                )
+
+        except TimeoutError:
+            await callback_query.message.reply_text("مهلت زمانی آپلود تمام شد!")
+        except asyncio.CancelledError:
+            await callback_query.message.reply_text("آپلود کنسل شد!")
+        except Exception as e:
+            await callback_query.message.reply_text("مشکلی در ثبت تمرین به وجود آمد لطفا دوباره تلاش نمایید!")
 
     @staticmethod
     async def send_admin_upload_notification(client, user_practice_id):
@@ -533,9 +532,16 @@ class BasePractice:
             pass
 
         media_types = [i.media_type.value for i in media_acsess]
-        str_media_types = "\n✔️ ".join(media_types)
+        # str_media_types = "\n✔️ ".join(media_types)
+        # await callback_query.message.reply_text(
+        #     f"📌 تایپ‌های قابل قبول:\n✔️ {str_media_types}\n{WARN_MSG}",
+        #     reply_markup=InlineKeyboardMarkup(
+        #         [[InlineKeyboardButton("Cancel", callback_data="back_home")]]
+        #     ),
+        # )
         await callback_query.message.reply_text(
-            f"📌 تایپ‌های قابل قبول:\n✔️ {str_media_types}\n{WARN_MSG}",
+            "تمرین خود را ارسال کنید\n"
+            "⚠️ مهلت بارگذاری فایل: 20 دقیقه",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("Cancel", callback_data="back_home")]]
             ),
@@ -553,116 +559,109 @@ class BasePractice:
             ),
         }
 
-        while True:
-            try:
-                answer = await pyrostep.wait_for(
-                    callback_query.from_user.id, timeout=TIME_OUT * 60
+        try:
+            answer = await pyrostep.wait_for(
+                callback_query.from_user.id, timeout=TIME_OUT * 60
+            )
+
+            if not self.user_practice_status(user_practice_id):
+                await answer.reply_text(
+                    "دیگر امکان آپلود تمرین نمی‌باشد!\n"
+                    "<spoiler>لطفا قوانین را مطالعه فرمایید.</spoiler>"
+                )
+                return
+
+            # Handle media messages
+            if answer.media and answer.media in media_methods:
+                send_method, media_type = media_methods[answer.media]
+
+                if media_type.value not in media_types:
+                    await answer.reply_text(
+                        "این تایپ مدیا مجاز نیست!\nلطفا دوباره اقدام به ارسال کنید!"
+                    )
+                    return
+
+                media_id = getattr(answer, answer.media.value.lower()).file_id
+                caption = answer.caption or None
+                file_size = getattr(answer, answer.media.value.lower()).file_size
+
+                # Check file size limit
+                if (file_size / 1024) > 50_000:
+                    await answer.reply_text(
+                        "فایل ارسالی باید کمتر از <b>50 مگابایت</b> باشد!\nلطفا دوباره اقدام به ارسال کنید!"
+                    )
+                    return
+
+                capt = (
+                    f"message id: <i>{answer.id}</i>\n---\n"
+                    f"from user @{answer.from_user.username}\n"
+                    f"user caption:\n{caption}\n"
+                    f"user_practice_id: {user_practice_id}"
                 )
 
-                if not self.user_practice_status(user_practice_id):
-                    await answer.reply_text(
-                        "دیگر امکان آپلود تمرین نمی‌باشد!\n"
-                        "<spoiler>لطفا قوانین را مطالعه فرمایید.</spoiler>"
+                # Forward the media to the channel
+                if media_type == db.MediaType.VIDEO_NOTE:
+                    forwarded_message = await send_method(
+                        chat_id=GROUP_CHAT_ID,
+                        **{answer.media.value.lower(): media_id},
                     )
-                    break
-
-                # Handle media messages
-                if answer.media and answer.media in media_methods:
-                    send_method, media_type = media_methods[answer.media]
-
-                    if media_type.value not in media_types:
-                        await answer.reply_text("این تایپ مدیا مجاز نیست!")
-                        continue
-
-                    media_id = getattr(answer, answer.media.value.lower()).file_id
-                    caption = answer.caption or None
-                    file_size = getattr(answer, answer.media.value.lower()).file_size
-
-                    # Check file size limit
-                    if (file_size / 1024) > 50_000:
-                        await answer.reply_text(
-                            "فایل ارسالی باید کمتر از <b>50 مگابایت</b> باشد!"
-                        )
-                        continue
-
-                    if not self.user_practice_status(user_practice_id):
-                        await answer.reply_to_message.delete()
-                        await answer.reply_text(
-                            "دیگر امکان آپلود تمرین نمی‌باشد!\n"
-                            "<spoiler>لطفا قوانین را مطالعه فرمایید.</spoiler>"
-                        )
-                        break
-
-                    capt = (
-                        f"message id: <i>{answer.id}</i>\n---\n"
-                        f"from user @{answer.from_user.username}\n"
-                        f"user caption:\n{caption}\n"
-                        f"user_practice_id: {user_practice_id}"
-                    )
-
-                    # Forward the media to the channel
-                    if media_type == db.MediaType.VIDEO_NOTE:
-                        forwarded_message = await send_method(
-                            chat_id=GROUP_CHAT_ID,
-                            **{answer.media.value.lower(): media_id},
-                        )
-                    else:
-                        forwarded_message = await send_method(
-                            chat_id=GROUP_CHAT_ID,
-                            **{answer.media.value.lower(): media_id},
-                            caption=capt,
-                        )
-                    telegram_link = getattr(
-                        forwarded_message, answer.media.value.lower()
-                    ).file_id
-
-                    self.update_db(
-                        pk=user_practice_id,
-                        file_link=telegram_link,
-                        media_type=media_type,
-                        user_caption=caption,
-                    )
-
-                    await answer.reply_text("تکلیف با موفقیت ثبت شد.")
-                    if not media_type == db.MediaType.VIDEO_NOTE:
-                        asyncio.create_task(
-                            self.update_group_msg_caption(
-                                forwarded_message, user_practice_id
-                            )
-                        )
-                    try:
-                        await callback_query.message.delete()
-                    except Exception:
-                        pass
-                    break
-
-                # Handle text messages
-                elif db.MediaType.TEXT.value in media_types and answer.text:
-                    self.update_db(
-                        pk=user_practice_id,
-                        file_link=None,
-                        media_type=db.MediaType.TEXT,
-                        user_caption=answer.text,
-                    )
-
-                    await answer.reply_text("تکلیف با موفقیت ثبت شد.")
-                    try:
-                        await callback_query.message.delete()
-                    except Exception:
-                        pass
-                    break
-
                 else:
-                    await answer.reply_text(
-                        "فقط امکان ثبت تایپ مدیاهای ذکر شده برقرار است!"
+                    forwarded_message = await send_method(
+                        chat_id=GROUP_CHAT_ID,
+                        **{answer.media.value.lower(): media_id},
+                        caption=capt,
                     )
+                telegram_link = getattr(
+                    forwarded_message, answer.media.value.lower()
+                ).file_id
 
-            except TimeoutError:
-                await callback_query.message.reply_text("مهلت زمانی آپلود تمام شد!")
-                break
-            except asyncio.CancelledError:
-                await callback_query.message.reply_text("آپلود کنسل شد!")
-                break
+                self.update_db(
+                    pk=user_practice_id,
+                    file_link=telegram_link,
+                    media_type=media_type,
+                    user_caption=caption,
+                )
+
+                await answer.reply_text("تکلیف با موفقیت ثبت شد.")
+                if not media_type == db.MediaType.VIDEO_NOTE:
+                    asyncio.create_task(
+                        self.update_group_msg_caption(
+                            forwarded_message, user_practice_id
+                        )
+                    )
+                try:
+                    await callback_query.message.delete()
+                except Exception:
+                    pass
+                return
+            # Handle text messages
+            elif db.MediaType.TEXT.value in media_types and answer.text:
+                self.update_db(
+                    pk=user_practice_id,
+                    file_link=None,
+                    media_type=db.MediaType.TEXT,
+                    user_caption=answer.text,
+                )
+
+                await answer.reply_text("تکلیف با موفقیت ثبت شد.")
+                try:
+                    await callback_query.message.delete()
+                except Exception:
+                    pass
+                return
+
+            else:
+                await answer.reply_text(
+                    "فقط امکان ثبت تایپ مدیاهای ذکر شده برقرار است!"
+                )
+                return
+
+        except TimeoutError:
+            await callback_query.message.reply_text("مهلت زمانی آپلود تمام شد!")
+        except asyncio.CancelledError:
+            await callback_query.message.reply_text("آپلود کنسل شد!")
+        except Exception as e:
+            await callback_query.message.reply_text("مشکلی در ثبت تمرین به وجود آمد لطفا دوباره تلاش نمایید!")
 
     @staticmethod
     def update_db(pk, file_link, media_type, user_caption=None):
@@ -909,9 +908,9 @@ class CorrectedPractice(BasePractice):
         self.register_handlers()
 
     def register_handlers(self):
-        self.app.on_message(
-            filters.regex("تصحیح شده‌ها") & filters.create(is_user)
-        )(self.xlist)
+        self.app.on_message(filters.regex("تصحیح شده‌ها") & filters.create(is_user))(
+            self.xlist
+        )
         self.app.on_callback_query(
             filters.regex(r"user_corrected_practice_paginate_list_(\d+)")
             & filters.create(is_user)

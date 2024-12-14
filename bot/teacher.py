@@ -303,135 +303,132 @@ class BaseUserPractice:
             ),
         }
 
-        while True:
-            try:
-                answer = await pyrostep.wait_for(
-                    callback_query.from_user.id, timeout=TIME_OUT * 60
+        try:
+            answer = await pyrostep.wait_for(
+                callback_query.from_user.id, timeout=TIME_OUT * 60
+            )
+
+            # Handle media messages
+            if answer.media and answer.media in media_methods:
+                send_method, media_type = media_methods[answer.media]
+
+                if media_type.value not in media_types:
+                    await answer.reply_text("این تایپ مدیا مجاز نیست!\nلطفا دوباره اقدام به ارسال کنید!")
+                    return
+
+                media_id = getattr(answer, answer.media.value.lower()).file_id
+                caption = answer.caption or self.correction_msg_dict.get(media_type)
+                file_size = getattr(answer, answer.media.value.lower()).file_size
+
+                # Check file size limit
+                if (file_size / 1024) > 50_000:
+                    await answer.reply_text(
+                        "فایل ارسالی باید کمتر از <b>50 مگابایت</b> باشد!\nلطفا دوباره اقدام به ارسال کنید!"
+                    )
+                    return
+
+                capt = (
+                    f"message id: <i>{answer.id}</i>\n---\n"
+                    f"from user @{answer.from_user.username}\n"
+                    f"user caption:\n{caption}\n"
+                    f"user_practice_id: {user_practice_id}"
                 )
 
-                # Handle media messages
-                if answer.media and answer.media in media_methods:
-                    send_method, media_type = media_methods[answer.media]
+                # Forward the media to the channel
+                forwarded_message = await send_method(
+                    chat_id=GROUP_CHAT_ID,
+                    **{answer.media.value.lower(): media_id},
+                    caption=capt,
+                )
+                telegram_link = getattr(
+                    forwarded_message, answer.media.value.lower()
+                ).file_id
 
-                    if media_type.value not in media_types:
-                        await answer.reply_text("این تایپ مدیا مجاز نیست!")
-                        continue
+                self.upload_db(
+                    pk=user_practice_id,
+                    media_type=media_type,
+                    file_id=telegram_link,
+                    caption=caption,
+                )
 
-                    media_id = getattr(answer, answer.media.value.lower()).file_id
-                    caption = answer.caption or self.correction_msg_dict.get(media_type)
-                    file_size = getattr(answer, answer.media.value.lower()).file_size
-
-                    # Check file size limit
-                    if (file_size / 1024) > 50_000:
-                        await answer.reply_text(
-                            "فایل ارسالی باید کمتر از <b>50 مگابایت</b> باشد!"
-                        )
-                        continue
-
-                    capt = (
-                        f"message id: <i>{answer.id}</i>\n---\n"
-                        f"from user @{answer.from_user.username}\n"
-                        f"user caption:\n{caption}\n"
-                        f"user_practice_id: {user_practice_id}"
-                    )
-
-                    # Forward the media to the channel
-                    forwarded_message = await send_method(
-                        chat_id=GROUP_CHAT_ID,
-                        **{answer.media.value.lower(): media_id},
-                        caption=capt,
-                    )
-                    telegram_link = getattr(
-                        forwarded_message, answer.media.value.lower()
-                    ).file_id
-
-                    self.upload_db(
-                        pk=user_practice_id,
-                        media_type=media_type,
-                        file_id=telegram_link,
-                        caption=caption,
-                    )
-
-                    # await answer.reply_text("تکلیف با موفقیت ثبت شد.")
-                    await answer.reply_text(
-                        "آیا از ثبت این تحلیل سخنرانی اطمینان دارید؟",
-                        reply_markup=InlineKeyboardMarkup(
+                # await answer.reply_text("تکلیف با موفقیت ثبت شد.")
+                await answer.reply_text(
+                    "آیا از ثبت این تحلیل سخنرانی اطمینان دارید؟",
+                    reply_markup=InlineKeyboardMarkup(
+                        [
                             [
-                                [
-                                    InlineKeyboardButton(
-                                        "بلی",
-                                        callback_data=f"teacher_{self.type}_practice_user_practice_confirm_{user_practice_id}_1",
-                                    ),
-                                    InlineKeyboardButton(
-                                        "خیر",
-                                        callback_data=f"teacher_{self.type}_practice_user_practice_confirm_{user_practice_id}_0",
-                                    ),
-                                ]
+                                InlineKeyboardButton(
+                                    "بلی",
+                                    callback_data=f"teacher_{self.type}_practice_user_practice_confirm_{user_practice_id}_1",
+                                ),
+                                InlineKeyboardButton(
+                                    "خیر",
+                                    callback_data=f"teacher_{self.type}_practice_user_practice_confirm_{user_practice_id}_0",
+                                ),
                             ]
-                        ),
-                    )
-                    # asyncio.create_task(
-                    #     self.send_user_correction_notification(client, user_practice_id)
-                    # )
-                    if not media_type == db.MediaType.VIDEO_NOTE:
-                        asyncio.create_task(
-                            self.update_group_msg_caption(
-                                forwarded_message, user_practice_id
-                            )
+                        ]
+                    ),
+                )
+                # asyncio.create_task(
+                #     self.send_user_correction_notification(client, user_practice_id)
+                # )
+                if not media_type == db.MediaType.VIDEO_NOTE:
+                    asyncio.create_task(
+                        self.update_group_msg_caption(
+                            forwarded_message, user_practice_id
                         )
-                    try:
-                        await callback_query.message.delete()
-                    except Exception:
-                        pass
-                    break
-
-                # Handle text messages
-                elif db.MediaType.TEXT.value in media_types and answer.text:
-                    self.upload_db(
-                        pk=user_practice_id,
-                        media_type=db.MediaType.TEXT,
-                        file_id=None,
-                        caption=answer.text,
                     )
+                try:
+                    await callback_query.message.delete()
+                except Exception:
+                    pass
+                return
 
-                    # await answer.reply_text("تکلیف با موفقیت ثبت شد.")
-                    await answer.reply_text(
-                        "آیا از ثبت این تحلیل سخنرانی اطمینان دارید؟",
-                        reply_markup=InlineKeyboardMarkup(
+            # Handle text messages
+            elif db.MediaType.TEXT.value in media_types and answer.text:
+                self.upload_db(
+                    pk=user_practice_id,
+                    media_type=db.MediaType.TEXT,
+                    file_id=None,
+                    caption=answer.text,
+                )
+
+                # await answer.reply_text("تکلیف با موفقیت ثبت شد.")
+                await answer.reply_text(
+                    "آیا از ثبت این تحلیل سخنرانی اطمینان دارید؟",
+                    reply_markup=InlineKeyboardMarkup(
+                        [
                             [
-                                [
-                                    InlineKeyboardButton(
-                                        "بلی",
-                                        callback_data=f"teacher_{self.type}_practice_user_practice_confirm_{user_practice_id}_1",
-                                    ),
-                                    InlineKeyboardButton(
-                                        "خیر",
-                                        callback_data=f"teacher_{self.type}_practice_user_practice_confirm_{user_practice_id}_0",
-                                    ),
-                                ]
+                                InlineKeyboardButton(
+                                    "بلی",
+                                    callback_data=f"teacher_{self.type}_practice_user_practice_confirm_{user_practice_id}_1",
+                                ),
+                                InlineKeyboardButton(
+                                    "خیر",
+                                    callback_data=f"teacher_{self.type}_practice_user_practice_confirm_{user_practice_id}_0",
+                                ),
                             ]
-                        ),
-                    )
-                    # asyncio.create_task(
-                    #     self.send_user_correction_notification(client, user_practice_id)
-                    # )
-                    try:
-                        await callback_query.message.delete()
-                    except Exception:
-                        pass
-                    break
+                        ]
+                    ),
+                )
+                # asyncio.create_task(
+                #     self.send_user_correction_notification(client, user_practice_id)
+                # )
+                try:
+                    await callback_query.message.delete()
+                except Exception:
+                    pass
+                return
 
-                else:
-                    await answer.reply_text(
-                        "فقط امکان ثبت تایپ مدیاهای ذکر شده برقرار است!"
-                    )
+            else:
+                await answer.reply_text(
+                    "فقط امکان ثبت تایپ مدیاهای ذکر شده برقرار است!"
+                )
 
-            except TimeoutError:
-                await callback_query.message.reply_text("مهلت زمانی آپلود تمام شد!")
-                break
-            except asyncio.CancelledError:
-                await callback_query.message.reply_text("آپلود کنسل شد!")
-                break
+        except TimeoutError:
+            await callback_query.message.reply_text("مهلت زمانی آپلود تمام شد!")
+        except asyncio.CancelledError:
+            await callback_query.message.reply_text("آپلود کنسل شد!")
 
     @staticmethod
     async def send_user_correction_notification(client, user_practice_id):

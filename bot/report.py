@@ -28,7 +28,7 @@ def is_teacher(filter, client, update):
 
 class Report:
     current_time = datetime.datetime.now(TIME_ZONE)
-    emojies = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+    emojies = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"] + [f"{i}. " for i in range(11, 21)]
 
     def __init__(self) -> None:
         with db.get_session() as session:
@@ -156,7 +156,7 @@ class Report:
             .filter(db.CorrectionModel.caption.isnot(None))
             .group_by(db.TeacherModel.id, db.TeacherModel.name)
             .order_by(desc("assignments_reviewed"))
-            .limit(10)
+            .limit(20)
             .all()
         )
 

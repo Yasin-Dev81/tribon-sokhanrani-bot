@@ -15,8 +15,8 @@ if IS_SQLITE:
 else:
     engine = create_engine(
         SQLALCHEMY_DATABASE_URL,
-        pool_size=10,
-        max_overflow=30,
+        pool_size=50,
+        max_overflow=200,
         pool_recycle=3600,
         pool_timeout=10,
         # pool_pre_ping=True,

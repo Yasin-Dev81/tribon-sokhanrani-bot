@@ -127,6 +127,6 @@ Enjoy using your bot!
 # Donation
 
 If you found Marzban useful and would like to support its development, you can make a donation in one of the following crypto networks:
-- Bitcoin network: `bc1qpys2nefgsjjgae3g3gqy9crsv3h3rm96tlkz0v`
+- Bitcoin network (coinos): coinos.io/sing404
 
 Thank you for your support!

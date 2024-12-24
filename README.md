@@ -20,7 +20,7 @@
 - [Overview](#overview)
 - [Features](#Features)
 - [Configuration](#configuration)
-- [How to use](#How to use)
+- [How to use](#How_to_use)
 - [Donation](#donation)
 
 # Overview

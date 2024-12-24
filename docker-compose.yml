@@ -12,21 +12,21 @@ services:
       MYSQL_ROOT_PASSWORD: "jojo9900"
       TZ: "Asia/Tehran"
     volumes:
-      - ./var/tmp5/mysql:/var/lib/mysql
+      - ./var/lib/tribon/mysql:/var/lib/mysql
     # networks:
     #   - main
 
-  # tribon-bot:
-  #   container_name: bot
-  #   image: yasindev/ah-score:db-test
-  #   env_file: .env
-  #   network_mode: host
-  #   volumes:
-  #     - "./var/tribon:/var/lib/tribon"
-  #   # networks:
-  #   #   - main
-  #   depends_on:
-  #     - db
+  tribon-bot:
+    container_name: bot
+    image: yasindev/ah-score:latest
+    env_file: .env
+    network_mode: host
+    volumes:
+      - "./var/lib/tribon:/var/lib/tribon"
+    # networks:
+    #   - main
+    depends_on:
+      - db
 
   phpmyadmin:
     image: phpmyadmin/phpmyadmin:latest

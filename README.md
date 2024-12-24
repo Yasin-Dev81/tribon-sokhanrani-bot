@@ -44,22 +44,17 @@ This Telegram bot is designed to streamline educational and task management proc
 - [Database structure](https://t.me/sokhanrani/1389)
 
 <p align="center">
-  <b>Admin Panel</b>
+  <b>Admin Panel</b> | <b>Mentor Panel</b>
 </p>
 <p align="center">
   <a href="https://github.com/Yasin-Dev81/tribon-sokhanrani-bot" target="_blank" rel="noopener noreferrer">
-    <img src="https://raw.githubusercontent.com/Yasin-Dev81/tribon-sokhanrani-bot/master/admin-panel.jpg" alt="Admin Panel Screenshot" width="614" height="1280">
+    <img src="https://raw.githubusercontent.com/Yasin-Dev81/tribon-sokhanrani-bot/master/admin-panel.jpg" alt="Admin Panel Screenshot" width="300" height="625">
+  </a>
+  <a href="https://github.com/Yasin-Dev81/tribon-sokhanrani-bot" target="_blank" rel="noopener noreferrer">
+    <img src="https://raw.githubusercontent.com/Yasin-Dev81/tribon-sokhanrani-bot/master/teacher-panel.jpg" alt="Mentor Panel Screenshot" width="300" height="625">
   </a>
 </p>
 
-<p align="center">
-  <b>Mentor Panel</b>
-</p>
-<p align="center">
-  <a href="https://github.com/Yasin-Dev81/tribon-sokhanrani-bot" target="_blank" rel="noopener noreferrer">
-    <img src="https://raw.githubusercontent.com/Yasin-Dev81/tribon-sokhanrani-bot/master/teacher-panel.jpg" alt="Mentor Panel Screenshot" width="614" height="1280">
-  </a>
-</p>
 
 
 # Configuration

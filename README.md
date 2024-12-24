@@ -74,7 +74,7 @@ This Telegram bot is designed to streamline educational and task management proc
 | LEARN_URL                                | url for usage learn                                                                                                      |
 
 
-# How to use
+# Run
 
 Follow the steps below to set up the Tribon bot on your server:
 

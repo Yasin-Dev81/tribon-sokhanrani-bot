@@ -219,24 +219,24 @@ class Practice:
                 )
             except Exception:
                 pass
-        for user in self.teachers:
-            try:
-                await client.send_message(
-                    chat_id=user.chat_id,
-                    text=data,
-                    reply_markup=InlineKeyboardMarkup(
-                        [
-                            [
-                                InlineKeyboardButton(
-                                    "مشاهده",
-                                    callback_data=f"teacher_all_practice_select_{new_practice_id}",
-                                )
-                            ]
-                        ]
-                    ),
-                )
-            except Exception:
-                pass
+        # for user in self.teachers:
+        #     try:
+        #         await client.send_message(
+        #             chat_id=user.chat_id,
+        #             text=data,
+        #             reply_markup=InlineKeyboardMarkup(
+        #                 [
+        #                     [
+        #                         InlineKeyboardButton(
+        #                             "مشاهده",
+        #                             callback_data=f"teacher_all_practice_select_{new_practice_id}",
+        #                         )
+        #                     ]
+        #                 ]
+        #             ),
+        #         )
+        #     except Exception:
+        #         pass
         for user in self.users(new_practice_id):
             try:
                 await client.send_message(
@@ -892,6 +892,7 @@ class BaseUserPractice:
         with db.get_session() as session:
             query = (
                 session.query(
+                    db.PracticeModel.user_type_id.label("practice_user_type_id"),
                     db.PracticeModel.title,
                     db.PracticeModel.caption,
                     db.UserPracticeModel.file_link.label("user_file_link"),
@@ -937,6 +938,7 @@ class BaseUserPractice:
                 )
                 .group_by(
                     db.UserPracticeModel.id,
+                    db.PracticeModel.id,
                     db.PracticeModel.title,
                     db.PracticeModel.caption,
                     db.UserPracticeModel.file_link,
@@ -958,7 +960,7 @@ class BaseUserPractice:
             return query
 
     @staticmethod
-    def old_teachers(user_id):
+    def old_teachers(user_id, user_type_id):
         with db.get_session() as session:
             return (
                 session.query(db.TeacherModel.name)
@@ -970,7 +972,12 @@ class BaseUserPractice:
                     db.UserPracticeModel,
                     db.UserPracticeModel.id == db.CorrectionModel.user_practice_id,
                 )
+                .join(
+                    db.PracticeModel,
+                    db.PracticeModel.id == db.UserPracticeModel.practice_id,
+                )
                 .filter(db.UserPracticeModel.user_id == user_id)
+                .filter(db.PracticeModel.user_type_id == user_type_id)
                 .distinct()
                 .limit(5)
                 .all()
@@ -1065,7 +1072,13 @@ class BaseUserPractice:
                 )
 
             old_teacher = list(
-                map(lambda i: i.name, self.old_teachers(user_id=user_practice.user_id))
+                map(
+                    lambda i: i.name,
+                    self.old_teachers(
+                        user_id=user_practice.user_id,
+                        user_type_id=user_practice.practice_user_type_id,
+                    ),
+                )
             )
             old_teacher = "\n▫️ ".join(old_teacher)
             update_user_practice = ""
